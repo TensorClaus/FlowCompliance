@@ -1,0 +1,9 @@
+# Local overrides — not committed (add to .gitignore if needed)
+# Use this for local secrets and dev-only config
+services:
+  api:
+    environment:
+      LOG_LEVEL: debug
+      # AWS_ACCESS_KEY_ID: your-key
+      # AWS_SECRET_ACCESS_KEY: your-secret
+      # KMS_KEY_ID: your-kms-key

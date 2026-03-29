@@ -1,0 +1,16 @@
+pnpm exec lint-staged
+
+# Type-check only packages with staged .ts/.tsx files
+staged=$(git diff --cached --name-only --diff-filter=d)
+
+if echo "$staged" | grep -q '^apps/web/'; then
+  pnpm exec tsc -p apps/web/tsconfig.json --noEmit
+fi
+
+if echo "$staged" | grep -q '^apps/api/'; then
+  pnpm exec tsc -p apps/api/tsconfig.json --noEmit
+fi
+
+if echo "$staged" | grep -q '^packages/shared/'; then
+  pnpm exec tsc -p packages/shared/tsconfig.json --noEmit
+fi

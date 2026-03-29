@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  // url is configured in prisma.config.ts via process.env.DATABASE_URL
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum UserRole {
+  EE_MANAGER
+  HR_DIRECTOR
+  CFO
+  SENIOR_MANAGER
+  CEO
+  ADMIN
+}
+
+// ─── Models ──────────────────────────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  name      String
+  kmsKeyId  String
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  users            User[]
+  employerProfiles EmployerProfile[]
+  eeaEvents        EeaEvent[]
+  eea2Drafts       Eea2Draft[]
+  eea1Declarations Eea1Declaration[]
+
+  @@map("tenants")
+}
+
+model User {
+  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId   String   @db.Uuid
+  email      String   @unique
+  role       UserRole
+  totpSecret String?
+  createdAt  DateTime @default(now()) @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("users")
+}
+
+model EmployerProfile {
+  id            String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String @db.Uuid
+  reportingYear Int
+
+  // Section A — 19 employer detail fields (EEA2 §A, TRD §2.1)
+  registeredName     String
+  tradingName        String?
+  companyRegNumber   String?
+  sarsRefNumber      String?
+  province           String
+  region             String?
+  localMunicipality  String?
+  physicalAddress    String
+  city               String
+  postalCode         String
+  postalAddress      String?
+  telephoneNumber    String?
+  faxNumber          String?
+  emailAddress       String?
+  sectorCode         String
+  totalEmployees     Int
+  contactPersonName  String
+  contactDesignation String
+  contactPersonEmail String?
+
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, reportingYear])
+  @@map("employer_profiles")
+}
+
+model EeaEvent {
+  id        String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId  String   @db.Uuid
+  formType  String?
+  formId    String?  @db.Uuid
+  eventType String?
+  fieldPath String?
+  prevValue Json?
+  newValue  Json?
+  metadata  Json
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id])
+  eea2Drafts Eea2Draft[]
+
+  // Immutability enforced via Postgres rules in migration SQL (no update/delete)
+  @@index([tenantId, formId, createdAt])
+  @@map("eea_events")
+}
+
+model Eea1Declaration {
+  id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId                String    @db.Uuid
+  employeeId              String    // employer-assigned workplace number
+  name                    String
+  workplaceNumber         String
+  // AES-256 KMS-encrypted at application layer before insert; null = non-disclosure
+  gender                  String?
+  race                    String?
+  disability              String?
+  foreignNational         Boolean
+  citizenshipDate         DateTime? @db.Date
+  disabilityNature        String?   // encrypted
+  reasonableAccommodation Boolean?
+  signatureDataUrl        String    // encrypted
+  declarationDate         DateTime  @db.Date
+  createdAt               DateTime  @default(now()) @db.Timestamptz
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@map("eea1_declarations")
+}
+
+model Eea2Draft {
+  id            String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  tenantId      String   @db.Uuid
+  reportingYear Int
+  state         Json
+  status        String   @default("draft")
+  lastEventId   String?  @db.Uuid
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  updatedAt     DateTime @updatedAt @db.Timestamptz
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  lastEvent EeaEvent? @relation(fields: [lastEventId], references: [id])
+
+  @@unique([tenantId, reportingYear])
+  @@map("eea2_drafts")
+}
