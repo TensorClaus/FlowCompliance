@@ -1,9 +1,16 @@
+import 'dotenv/config'
 import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    env: {
+      DATABASE_URL: 'postgresql://test:test@localhost:5432/simplifi_test',
+      REDIS_URL: 'redis://localhost:6379',
+      SESSION_SECRET: process.env.SESSION_SECRET ?? '',
+      NODE_ENV: 'test',
+    },
     coverage: {
       provider: 'v8',
       thresholds: {
@@ -11,6 +18,12 @@ export default defineConfig({
         functions: 80,
         lines: 80,
         statements: 80,
+        'src/providers/**': {
+          branches: 90,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
       },
     },
   },

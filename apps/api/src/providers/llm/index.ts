@@ -1,0 +1,5 @@
+export type { SanitisedPrompt } from './sanitised-prompt.js'
+export type { LLMCompletionOptions, LLMCompletionResult, LLMProvider } from './llm-provider.js'
+export { BedrockHaikuProvider } from './bedrock-haiku-provider.js'
+export { AnthropicProvider } from './anthropic-provider.js'
+export { createLLMProvider } from './llm-provider.factory.js'
