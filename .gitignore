@@ -4,3 +4,11 @@ dist/
 .env.*
 !.env.example
 *.tsbuildinfo
+
+# Generated outputs
+coverage/
+graphify-out/
+runs/
+
+# Local Claude Code settings
+.claude/

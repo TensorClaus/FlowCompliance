@@ -28,6 +28,7 @@ model Tenant {
   createdAt DateTime @default(now()) @db.Timestamptz
 
   users            User[]
+  sessions         Session[]
   employerProfiles EmployerProfile[]
   eeaEvents        EeaEvent[]
   eea2Drafts       Eea2Draft[]
@@ -37,16 +38,39 @@ model Tenant {
 }
 
 model User {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  tenantId   String   @db.Uuid
-  email      String   @unique
-  role       UserRole
-  totpSecret String?
-  createdAt  DateTime @default(now()) @db.Timestamptz
+  id           String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  email        String   @unique
+  passwordHash String
+  totpSecret   String?
+  tenantId     String   @db.Uuid
+  role         UserRole @default(EE_MANAGER)
+  createdAt    DateTime @default(now()) @db.Timestamptz
+  updatedAt    DateTime @updatedAt @db.Timestamptz
 
-  tenant Tenant @relation(fields: [tenantId], references: [id])
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  sessions Session[]
 
+  @@index([tenantId])
+  @@index([email])
   @@map("users")
+}
+
+model Session {
+  id              String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  userId          String    @db.Uuid
+  tenantId        String    @db.Uuid
+  refreshTokenJti String    @unique
+  expiresAt       DateTime
+  revokedAt       DateTime?
+  createdAt       DateTime  @default(now()) @db.Timestamptz
+  updatedAt       DateTime  @updatedAt @db.Timestamptz
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([userId])
+  @@map("sessions")
 }
 
 model EmployerProfile {
@@ -107,7 +131,7 @@ model EeaEvent {
 model Eea1Declaration {
   id                      String    @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   tenantId                String    @db.Uuid
-  employeeId              String    // employer-assigned workplace number
+  employeeId              String // employer-assigned workplace number
   name                    String
   workplaceNumber         String
   // AES-256 KMS-encrypted at application layer before insert; null = non-disclosure
@@ -116,9 +140,9 @@ model Eea1Declaration {
   disability              String?
   foreignNational         Boolean
   citizenshipDate         DateTime? @db.Date
-  disabilityNature        String?   // encrypted
+  disabilityNature        String? // encrypted
   reasonableAccommodation Boolean?
-  signatureDataUrl        String    // encrypted
+  signatureDataUrl        String // encrypted
   declarationDate         DateTime  @db.Date
   createdAt               DateTime  @default(now()) @db.Timestamptz
 

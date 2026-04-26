@@ -24,11 +24,15 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "^6.7.0",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@playwright/test": "^1.43.0",
     "@types/node": "^20.19.37",
     "@types/react": "^18.3.1",
     "@types/react-dom": "^18.3.0",
     "@vitejs/plugin-react-swc": "^4.3.0",
+    "msw": "^2.11.5",
     "autoprefixer": "^10.4.27",
     "jsdom": "^24.0.0",
     "postcss": "^8.5.8",

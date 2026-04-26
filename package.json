@@ -13,6 +13,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r typecheck",
+    "type-check": "pnpm -r typecheck",
     "test": "vitest run --passWithNoTests",
     "test:e2e": "pnpm --filter @simplifi/web exec playwright test",
     "prepare": "husky",

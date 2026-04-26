@@ -1,5 +1,6 @@
 import { createRoute } from '@tanstack/react-router'
 import { Route as rootRoute } from './__root'
+import { EEAWizard } from '@/features/eea'
 
 export const Route = createRoute({
   getParentRoute: () => rootRoute,
@@ -9,8 +10,8 @@ export const Route = createRoute({
 
 function IndexPage() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background">
-      <h1 className="text-2xl font-semibold text-foreground">Simplifi</h1>
+    <main className="min-h-screen bg-slate-50 px-4 py-10">
+      <EEAWizard />
     </main>
   )
 }

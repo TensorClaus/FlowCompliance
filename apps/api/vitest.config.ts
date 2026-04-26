@@ -24,6 +24,12 @@ export default defineConfig({
           lines: 90,
           statements: 90,
         },
+        'src/event-store/**': {
+          branches: 90,
+          functions: 90,
+          lines: 90,
+          statements: 90,
+        },
       },
     },
   },

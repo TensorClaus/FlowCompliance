@@ -4,8 +4,13 @@ import jwt from 'jsonwebtoken'
 import { config } from '../config.js'
 import { prisma } from '../lib/prisma.js'
 
+const JWT_ALGORITHM = 'HS256' as const
+const PUBLIC_PREFIXES = ['/auth/register', '/auth/login', '/auth/refresh', '/auth/totp/verify']
+const PUBLIC_EXACT = new Set(['/health'])
+
 interface JwtPayload {
   tenantId: string
+  tokenType: 'access'
   sub?: string
   iat?: number
   exp?: number
@@ -21,8 +26,18 @@ function extractBearerToken(request: FastifyRequest): string | null {
   return null
 }
 
+function isPublicRoute(url: string): boolean {
+  if (PUBLIC_EXACT.has(url)) return true
+  const pathname = url.split('?')[0] ?? url
+  return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
+}
+
 function tenantContextPlugin(app: FastifyInstance) {
   app.addHook('onRequest', async (request, reply) => {
+    if (isPublicRoute(request.url)) {
+      return
+    }
+
     const token = extractBearerToken(request)
 
     if (token === null) {
@@ -31,7 +46,9 @@ function tenantContextPlugin(app: FastifyInstance) {
 
     let payload: JwtPayload
     try {
-      payload = jwt.verify(token, config.JWT_SECRET) as JwtPayload
+      payload = jwt.verify(token, config.SESSION_SECRET, {
+        algorithms: [JWT_ALGORITHM],
+      }) as JwtPayload
     } catch {
       return reply.status(401).send({ error: 'Invalid or expired token' })
     }
@@ -40,6 +57,10 @@ function tenantContextPlugin(app: FastifyInstance) {
 
     if (typeof tenantId !== 'string' || !UUID_RE.test(tenantId)) {
       return reply.status(401).send({ error: 'Token missing valid tenantId claim' })
+    }
+
+    if ((payload as { tokenType: string }).tokenType !== 'access') {
+      return reply.status(401).send({ error: 'Invalid or expired token' })
     }
 
     // Set the tenant context for RLS on this connection.

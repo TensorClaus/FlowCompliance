@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { EEAFormStatusSchema, MonitoringFrequencySchema } from '../enums.js'
+import { CEODeclarationSchema } from './common.js'
 import { EmployerProfileSchema } from './employer.js'
 import { OccupationalMatrixSchema } from './matrix.js'
 
@@ -116,26 +117,8 @@ export type BarrierRecord = z.infer<typeof BarrierRecordSchema>
 // Helper: CEODeclaration — DC-003 Section H (HITL gate)
 // ---------------------------------------------------------------------------
 
-/**
- * CEO / authorised signatory declaration for the EEA2 Annual Report.
- * This record is null until the HITL (human-in-the-loop) signing gate is passed,
- * after which it is populated and the form status advances to 'signed'.
- * DC-003 Section H.
- */
-export const CEODeclarationSchema = z.object({
-  /** Full legal name of the CEO or authorised signatory */
-  fullName: z.string(),
-  /** Registered organisation name as it appears on official documents */
-  organisationName: z.string(),
-  /** Base64 or data-URL encoded signature image */
-  signatureDataUrl: z.string(),
-  /** Date on which the declaration was signed */
-  date: z.coerce.date(),
-  /** Physical location (place) where the declaration was signed */
-  place: z.string(),
-})
-
-export type CEODeclaration = z.infer<typeof CEODeclarationSchema>
+// Re-exported from common.ts to ensure consistency across EEA2 and EEA4
+export { CEODeclarationSchema, type CEODeclaration } from './common.js'
 
 // ---------------------------------------------------------------------------
 // Helper: SectorTargets — DC-003 Section E, Table 6.1

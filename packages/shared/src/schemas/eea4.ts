@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { EEAFormStatusSchema } from '../enums.js'
+import { CEODeclarationSchema } from './common.js'
 import { EmployerProfileSchema } from './employer.js'
 import { RemunerationMatrixSchema, RemBreakdownMatrixSchema } from './matrix.js'
 
@@ -7,30 +8,8 @@ import { RemunerationMatrixSchema, RemBreakdownMatrixSchema } from './matrix.js'
 // CEO Declaration
 // ---------------------------------------------------------------------------
 
-/**
- * CEO / authorised signatory declaration for EEA forms.
- * Mirrors the EEA2 Section H declaration structure. Defined here locally
- * because eea2.ts is not yet available. Once eea2.ts ships, both should
- * import from a shared declarations file to avoid drift.
- *
- * This schema is the HITL gate: the EEA4 `declaration` field is optional
- * and remains null/undefined until the cross-form headcount validation
- * between EEA4 Section C and EEA2 Table 1.1 passes and the CEO signs.
- */
-export const CEODeclarationSchema = z.object({
-  /** Full legal name of the CEO / authorised representative */
-  fullName: z.string().min(1),
-  /** Registered organisation name at time of signing */
-  organisationName: z.string().min(1),
-  /** Base-64 encoded signature image data URL (data:image/…;base64,…) */
-  signatureDataUrl: z.string().min(1),
-  /** Date the declaration was signed */
-  date: z.coerce.date(),
-  /** Physical location where the declaration was signed */
-  place: z.string().min(1),
-})
-
-export type CEODeclaration = z.infer<typeof CEODeclarationSchema>
+// Re-exported from common.ts to ensure consistency across EEA2 and EEA4
+export { CEODeclarationSchema, type CEODeclaration } from './common.js'
 
 // ---------------------------------------------------------------------------
 // Section E — Median and Remuneration Gap

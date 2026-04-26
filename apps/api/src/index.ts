@@ -2,7 +2,7 @@
 import './config.js' // fail-fast env validation — must be first
 import { buildApp } from './app.js'
 
-const app = buildApp()
+const app = await buildApp()
 
 const shutdown = async (signal: string) => {
   app.log.info({ signal }, 'Shutdown signal received')

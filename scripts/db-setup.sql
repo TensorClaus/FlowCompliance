@@ -1,0 +1,37 @@
+-- ========================================================================
+-- Database Setup Script: Fix GRANT CONNECT (Migration M-004)
+-- ========================================================================
+--
+-- ISSUE:
+-- Migration 20260330000006_rls (line 13) contained:
+--   GRANT CONNECT ON DATABASE current_database() TO simplifi_app;
+--
+-- PROBLEM:
+-- current_database() is a PostgreSQL function that returns the current
+-- database name at runtime. However, GRANT statements require a literal
+-- database identifier, not a function call. This means the GRANT CONNECT
+-- was never actually applied — depending on the SQL parser/deployment
+-- context, it either silently failed or errored.
+--
+-- SOLUTION:
+-- This script applies the correct GRANT with a hardcoded database name.
+-- Since migrations are immutable, this fix must be applied separately.
+--
+-- USAGE:
+-- Replace 'simplifi_dev' below with your actual database name, then run:
+--   psql $DATABASE_URL -f scripts/db-setup.sql
+--
+-- IDEMPOTENCY:
+-- GRANT CONNECT is idempotent. It is safe and recommended to re-run this
+-- script in any environment (local, CI, staging, production). Running it
+-- multiple times will not cause errors or duplicate permissions.
+--
+-- ENVIRONMENT-SPECIFIC DATABASE NAMES:
+-- - Local development:  simplifi_dev (or your custom .env value)
+-- - CI/Test:           ci_test (matches DATABASE_URL in ci.yml)
+-- - Production:        <set per deployment — e.g., simplifi_prod>
+-- ========================================================================
+
+-- Fix the GRANT CONNECT privilege for the simplifi_app role.
+-- Replace 'simplifi_dev' with your actual database name for this environment.
+GRANT CONNECT ON DATABASE simplifi_dev TO simplifi_app;
