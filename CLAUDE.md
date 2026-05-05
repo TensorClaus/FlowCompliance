@@ -2,7 +2,7 @@
 
 **Last Updated:** 2026-04-18\
 **Scope:** Simplifi (SA employment equity compliance automation)\
-**Hierarchy:** Project-level (this file) → Global ~/.claude/CLAUDE-consolidated.md (inherits defaults)
+**Hierarchy:** Project-level (this file) → Global \~/.claude/CLAUDE-consolidated.md (inherits defaults)
 
 ---
 
