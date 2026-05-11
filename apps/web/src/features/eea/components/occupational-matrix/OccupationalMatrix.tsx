@@ -108,7 +108,10 @@ export interface OccupationalMatrixProps {
   isDesignatedEmployer: boolean
   disabilityHeadcount?: number
   onChange?: (updated: OccupationalMatrixData) => void
-  onValidationError?: (errors: MatrixValidationError[]) => void
+  onValidationError?: (
+    errors: MatrixValidationError[],
+    context?: { disabilityFlagActive: boolean },
+  ) => void
   autosaveOptions?: UseEEAAutosaveOptions
   eventContext?: OccupationalMatrixEventContext
 }
@@ -169,7 +172,7 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
     // Propagate validation errors to caller
     useEffect(() => {
       if (mode !== 'validate') return
-      onValidationErrorRef.current?.(validationErrors)
+      onValidationErrorRef.current?.(validationErrors, { disabilityFlagActive })
     }, [mode, validationErrors])
 
     // Scroll to first error cell when validate mode activates
