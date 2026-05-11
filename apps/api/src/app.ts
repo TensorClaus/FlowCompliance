@@ -10,6 +10,7 @@ import logScrubberPlugin, { REDACT_CONFIG } from './plugins/log-scrubber.js'
 import tenantContextPlugin from './plugins/tenant-context.js'
 import { authRoutes } from './routes/auth.routes.js'
 import { eea1Routes } from './routes/eea1.routes.js'
+import { eea2EventRoutes } from './routes/eea2/events.js'
 import { eea2Routes } from './routes/eea2.routes.js'
 import { employerRoutes } from './routes/employer.routes.js'
 import { totpRoutes } from './routes/totp.routes.js'
@@ -42,6 +43,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(employerRoutes)
   await app.register(eea1Routes)
   await app.register(eea2Routes)
+  await app.register(eea2EventRoutes)
 
   // Tenant context — enforces JWT auth + sets RLS GUC for all non-public routes.
   // The plugin's onRequest hook skips /health; add further public paths there as needed.
