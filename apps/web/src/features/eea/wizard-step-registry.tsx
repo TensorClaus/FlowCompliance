@@ -1,6 +1,10 @@
+import { OccupationalMatrixSchema, type OccupationalMatrix } from '@simplifi/shared'
 import { useEffect } from 'react'
 import { z } from 'zod'
+import { PercentageSliders } from './components/PercentageSliders'
 import { EmployerDetailsForm } from './components/employer-details-form'
+import { DisabilityFlagBanner } from './components/occupational-matrix/DisabilityFlagBanner'
+import { OccupationalMatrix as OccupationalMatrixComponent } from './components/occupational-matrix/OccupationalMatrix'
 import { usePrefill } from './hooks/use-prefill'
 import { useWizardFormController } from './wizard-form-context'
 import type {
@@ -46,6 +50,23 @@ export const SECTION_B_SCHEMA = z.object({
     .optional(),
 })
 
+export const SECTION_C_MATRIX_SCHEMA = OccupationalMatrixSchema
+
+export const SECTION_D_TRAINING_SPEND_SCHEMA = z.object({
+  totalBudget: z.number().min(0),
+  percentages: z
+    .number()
+    .int()
+    .min(0)
+    .array()
+    .length(5)
+    .refine(
+      (values) => values.reduce((sum, value) => sum + value, 0) === 100,
+      'Percentages must sum to 100%',
+    ),
+  narrative: z.string().max(500).optional(),
+})
+
 const placeholderSchema = z.object({}).passthrough()
 
 const emptySectionAReadOnly: SectionAReadOnlyFields = {
@@ -59,6 +80,99 @@ export const emptySectionBData: SectionBData = {
   permanent: { male: 0, female: 0 },
   nonPermanent: { male: 0, female: 0 },
   contract: { male: 0, female: 0 },
+}
+
+const emptyMatrixCell = { value: 0 }
+
+const createEmptyMatrixRow = (): OccupationalMatrix['topManagement'] => ({
+  africanMale: emptyMatrixCell,
+  africanFemale: emptyMatrixCell,
+  colouredMale: emptyMatrixCell,
+  colouredFemale: emptyMatrixCell,
+  indianMale: emptyMatrixCell,
+  indianFemale: emptyMatrixCell,
+  whiteMale: emptyMatrixCell,
+  whiteFemale: emptyMatrixCell,
+  foreignNationalMale: emptyMatrixCell,
+  foreignNationalFemale: emptyMatrixCell,
+  total: emptyMatrixCell,
+})
+
+export const createEmptyOccupationalMatrix = (): OccupationalMatrix => ({
+  topManagement: createEmptyMatrixRow(),
+  seniorManagement: createEmptyMatrixRow(),
+  professionallyQualified: createEmptyMatrixRow(),
+  skilledTechnical: createEmptyMatrixRow(),
+  semiSkilled: createEmptyMatrixRow(),
+  unskilled: createEmptyMatrixRow(),
+  temporaryEmployees: createEmptyMatrixRow(),
+  totalPermanent: createEmptyMatrixRow(),
+  grandTotal: createEmptyMatrixRow(),
+})
+
+export const getOccupationalMatrix = (value: unknown): OccupationalMatrix => {
+  const parsed = OccupationalMatrixSchema.safeParse(value)
+  return parsed.success ? parsed.data : createEmptyOccupationalMatrix()
+}
+
+export const getOccupationalMatrixTotal = (value: unknown): number =>
+  getOccupationalMatrix(value).grandTotal.total.value
+
+const getNestedValue = (value: unknown, path: string[]): unknown => {
+  let current = value
+  for (const key of path) {
+    if (typeof current !== 'object' || current === null || Array.isArray(current)) {
+      return undefined
+    }
+    current = (current as Record<string, unknown>)[key]
+  }
+  return current
+}
+
+const extractGoalsMatrix = (payload: unknown): OccupationalMatrix | null => {
+  const candidates = [
+    getNestedValue(payload, ['sectionC', 'goals']),
+    getNestedValue(payload, ['goals']),
+    getNestedValue(payload, ['numericalGoals']),
+    getNestedValue(payload, ['report', 'sectionC', 'goals']),
+  ]
+
+  for (const candidate of candidates) {
+    const parsed = OccupationalMatrixSchema.safeParse(candidate)
+    if (parsed.success) {
+      return parsed.data
+    }
+  }
+
+  return null
+}
+
+interface TrainingSpendData {
+  totalBudget: number
+  percentages: number[]
+  narrative: string
+}
+
+const trainingSpendGroups = ['African', 'Coloured', 'Indian or Asian', 'White', 'Non-designated']
+
+const emptyTrainingSpendData: TrainingSpendData = {
+  totalBudget: 0,
+  percentages: [0, 0, 0, 0, 0],
+  narrative: '',
+}
+
+const getTrainingSpendData = (value: unknown): TrainingSpendData => {
+  const partial =
+    typeof value === 'object' && value !== null ? (value as Partial<TrainingSpendData>) : {}
+  return {
+    totalBudget: typeof partial.totalBudget === 'number' ? partial.totalBudget : 0,
+    percentages: Array.isArray(partial.percentages)
+      ? [...emptyTrainingSpendData.percentages].map((fallback, index) =>
+          typeof partial.percentages?.[index] === 'number' ? partial.percentages[index] : fallback,
+        )
+      : emptyTrainingSpendData.percentages,
+    narrative: typeof partial.narrative === 'string' ? partial.narrative : '',
+  }
 }
 
 const getSectionAData = (value: unknown, reportingYear: number): SectionAData => {
@@ -367,6 +481,180 @@ export function SectionBStep(_props: StepProps) {
   )
 }
 
+export function SectionC1Step({ wizardContext, updateWizardContext }: StepProps) {
+  const { formState, setStepData } = useWizardFormController()
+  const matrix = getOccupationalMatrix(formState['section-c1'])
+  const actual = matrix.grandTotal.total.value
+  const expected = wizardContext.sectionBTotals?.grandTotal ?? null
+  const hasMismatch = expected !== null && actual !== expected
+
+  useEffect(() => {
+    if (actual > 0 && 0 / actual < 0.03) {
+      updateWizardContext({ disabilityFlagActive: true })
+    }
+  }, [actual, updateWizardContext])
+
+  return (
+    <section aria-label="Section C current workforce" className="grid gap-4">
+      {hasMismatch ? (
+        <div
+          className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+          role="alert"
+        >
+          Workforce profile total ({actual}) does not match total workforce count ({expected})
+          entered in Section B.
+        </div>
+      ) : null}
+      {wizardContext.disabilityFlagActive ? (
+        <DisabilityFlagBanner headcount={0} percentage={0} total={Math.max(actual, 1)} />
+      ) : null}
+      <OccupationalMatrixComponent
+        data={matrix}
+        disabilityHeadcount={0}
+        isDesignatedEmployer={false}
+        mode="edit"
+        onChange={(updated): void => {
+          setStepData('section-c1', updated)
+          const grandTotal = updated.grandTotal.total.value
+          if (grandTotal > 0 && 0 / grandTotal < 0.03) {
+            updateWizardContext({ disabilityFlagActive: true })
+          }
+        }}
+      />
+    </section>
+  )
+}
+
+export function SectionC2Step(_props: StepProps) {
+  const { tenantId, formState, setStepData } = useWizardFormController()
+  const matrix = getOccupationalMatrix(formState['section-c2'])
+
+  useEffect(() => {
+    if (tenantId.length === 0) {
+      return
+    }
+
+    let cancelled = false
+    const loadGoals = async (): Promise<void> => {
+      try {
+        const url = new URL('/api/eea13/latest', globalThis.location.origin)
+        url.searchParams.set('tenantId', tenantId)
+        const response = await fetch(url.toString(), { headers: { accept: 'application/json' } })
+        if (cancelled) {
+          return
+        }
+
+        if (response.status === 404) {
+          setStepData('section-c2', createEmptyOccupationalMatrix())
+          return
+        }
+
+        if (!response.ok) {
+          return
+        }
+
+        const payload: unknown = await response.json()
+        const goals = extractGoalsMatrix(payload)
+        setStepData('section-c2', goals ?? createEmptyOccupationalMatrix())
+      } catch {
+        if (!cancelled) {
+          setStepData('section-c2', createEmptyOccupationalMatrix())
+        }
+      }
+    }
+
+    void loadGoals()
+    return () => {
+      cancelled = true
+    }
+  }, [setStepData, tenantId])
+
+  return (
+    <section aria-label="Section C numerical goals" className="grid gap-4">
+      <OccupationalMatrixComponent
+        data={matrix}
+        isDesignatedEmployer={false}
+        mode="edit"
+        onChange={(updated): void => {
+          setStepData('section-c2', updated)
+        }}
+      />
+    </section>
+  )
+}
+
+export function SectionD1Step(_props: StepProps) {
+  const { formState, setStepData } = useWizardFormController()
+  const matrix = getOccupationalMatrix(formState['section-d1'])
+
+  return (
+    <section aria-label="Section D trained employees" className="grid gap-4">
+      <OccupationalMatrixComponent
+        data={matrix}
+        isDesignatedEmployer={false}
+        mode="edit"
+        onChange={(updated): void => {
+          setStepData('section-d1', updated)
+        }}
+      />
+    </section>
+  )
+}
+
+export function SectionD2Step(_props: StepProps) {
+  const { formState, setStepData } = useWizardFormController()
+  const trainingSpend = getTrainingSpendData(formState['section-d2'])
+  const percentageTotal = trainingSpend.percentages.reduce((sum, value) => sum + value, 0)
+
+  const updateTrainingSpend = (patch: Partial<TrainingSpendData>): void => {
+    setStepData('section-d2', {
+      ...trainingSpend,
+      ...patch,
+    })
+  }
+
+  return (
+    <section aria-label="Section D training spend" className="grid gap-4">
+      <label className="grid gap-1">
+        <span className="text-sm font-medium">Total training budget (ZAR)</span>
+        <input
+          aria-label="Total training budget (ZAR)"
+          className="rounded border border-slate-300 px-3 py-2"
+          min={0}
+          onChange={(event): void => {
+            updateTrainingSpend({ totalBudget: Number(event.target.value) })
+          }}
+          type="number"
+          value={trainingSpend.totalBudget}
+        />
+      </label>
+      <PercentageSliders
+        groups={trainingSpendGroups}
+        onChange={(values): void => {
+          updateTrainingSpend({ percentages: values })
+        }}
+        values={trainingSpend.percentages}
+      />
+      {percentageTotal === 100 ? null : (
+        <p className="text-sm text-red-700">Percentages must sum to 100%</p>
+      )}
+      <label className="grid gap-1">
+        <span className="text-sm font-medium">Training spend narrative</span>
+        <textarea
+          aria-label="Training spend narrative"
+          className="min-h-28 rounded border border-slate-300 px-3 py-2"
+          maxLength={500}
+          onChange={(event): void => {
+            updateTrainingSpend({ narrative: event.target.value })
+          }}
+          value={trainingSpend.narrative}
+        />
+        <span className="text-xs text-slate-600">{trainingSpend.narrative.length} / 500</span>
+      </label>
+    </section>
+  )
+}
+
 function PlaceholderStep(_props: StepProps) {
   return (
     <section aria-label="Pending section" className="grid gap-4">
@@ -398,28 +686,28 @@ export const STEP_REGISTRY: StepRegistry = {
     validationSchema: SECTION_B_SCHEMA,
     requiresHITL: false,
   },
-  'section-c-recruitment': {
-    sectionKey: 'sectionC.recruitment',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+  'section-c1': {
+    sectionKey: 'sectionC.current',
+    component: SectionC1Step,
+    validationSchema: SECTION_C_MATRIX_SCHEMA,
     requiresHITL: false,
   },
-  'section-c-promotions': {
-    sectionKey: 'sectionC.promotions',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+  'section-c2': {
+    sectionKey: 'sectionC.goals',
+    component: SectionC2Step,
+    validationSchema: SECTION_C_MATRIX_SCHEMA,
     requiresHITL: false,
   },
-  'section-c-terminations': {
-    sectionKey: 'sectionC.terminations',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+  'section-d1': {
+    sectionKey: 'sectionD.trained',
+    component: SectionD1Step,
+    validationSchema: SECTION_C_MATRIX_SCHEMA,
     requiresHITL: false,
   },
-  'section-d-skills': {
-    sectionKey: 'sectionD',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+  'section-d2': {
+    sectionKey: 'sectionD.trainingSpend',
+    component: SectionD2Step,
+    validationSchema: SECTION_D_TRAINING_SPEND_SCHEMA,
     requiresHITL: false,
   },
   'section-e-sector-targets': {

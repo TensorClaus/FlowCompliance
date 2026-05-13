@@ -3,7 +3,7 @@ import { useEEAWizard, type UseEEAWizardOptions } from '../hooks/use-eea-wizard'
 import type { UsePrefillOptions } from '../hooks/use-prefill'
 import { WizardFormContext } from '../wizard-form-context'
 import { STEP_IDS, STEP_REGISTRY } from '../wizard-step-registry'
-import type { PatchDraftStateInput, StepId } from '../wizard-types'
+import type { PatchDraftStateInput, StepId, WizardContext } from '../wizard-types'
 
 const UNSAVED_CHANGES_WARNING = 'You have unsaved changes. Leave this step without saving?'
 
@@ -11,6 +11,8 @@ export interface EEAWizardProps {
   formId?: string
   tenantId?: string
   reportingYear?: number
+  initialFormState?: Record<StepId, unknown>
+  initialWizardContext?: WizardContext
   confirmNavigation?: (message: string) => boolean
   onComplete?: (values: Record<StepId, unknown>) => void
   patchDraftState?: (input: PatchDraftStateInput) => Promise<void>
@@ -20,10 +22,10 @@ export interface EEAWizardProps {
 const stepLabels: Record<StepId, string> = {
   'section-a': 'Section A - Employer details',
   'section-b': 'Section B - Workforce totals',
-  'section-c-recruitment': 'Section C - Recruitment',
-  'section-c-promotions': 'Section C - Promotions',
-  'section-c-terminations': 'Section C - Terminations',
-  'section-d-skills': 'Section D - Skills development',
+  'section-c1': 'Section C - Current workforce',
+  'section-c2': 'Section C - Numerical goals',
+  'section-d1': 'Section D - Trained employees',
+  'section-d2': 'Section D - Training spend',
   'section-e-sector-targets': 'Section E - Sector targets',
   'section-e-next-year-targets': 'Section E - Next year targets',
   'section-f-consultation': 'Section F - Consultation',
@@ -42,6 +44,8 @@ export function EEAWizard({
   formId = 'eea2-draft',
   tenantId = '',
   reportingYear = getCurrentYear(),
+  initialFormState,
+  initialWizardContext,
   confirmNavigation = defaultConfirmNavigation,
   onComplete,
   patchDraftState,
@@ -49,6 +53,8 @@ export function EEAWizard({
 }: EEAWizardProps) {
   const wizard = useEEAWizard({
     formId,
+    ...(initialFormState === undefined ? {} : { initialFormState }),
+    ...(initialWizardContext === undefined ? {} : { initialWizardContext }),
     ...(patchDraftState === undefined ? {} : { patchDraftState }),
   } satisfies UseEEAWizardOptions)
   const [isDirty, setIsDirty] = useState(false)
@@ -64,7 +70,7 @@ export function EEAWizard({
       setIsDirty(true)
       setValidationMessage(null)
     },
-    [wizard],
+    [wizard.setStepData],
   )
 
   const navigateToStep = (nextStep: StepId): void => {
@@ -167,6 +173,7 @@ export function EEAWizard({
             onAdvance={(): void => {
               void advance()
             }}
+            updateWizardContext={wizard.updateWizardContext}
             wizardContext={wizard.wizardContext}
           />
         )}

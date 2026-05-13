@@ -3,6 +3,7 @@ import {
   STEP_IDS,
   STEP_REGISTRY,
   calculateSectionBTotals,
+  getOccupationalMatrixTotal,
   getSectionBData,
 } from '../wizard-step-registry'
 import type { PatchDraftStateInput, StepId, WizardContext } from '../wizard-types'
@@ -14,6 +15,7 @@ export interface UseEEAWizardOptions {
   formId: string
   initialStep?: StepId
   initialFormState?: Record<StepId, unknown>
+  initialWizardContext?: WizardContext
   patchDraftState?: (input: PatchDraftStateInput) => Promise<void>
 }
 
@@ -27,6 +29,7 @@ export interface UseEEAWizardResult {
   advance: () => Promise<void>
   back: () => void
   setStepData: (stepId: StepId, updater: StepDataUpdater) => void
+  updateWizardContext: (patch: Partial<WizardContext>) => void
 }
 
 const defaultWizardContext: WizardContext = {
@@ -72,17 +75,24 @@ export function useEEAWizard({
   formId,
   initialStep = STEP_IDS[0] ?? 'section-a',
   initialFormState = {},
+  initialWizardContext = defaultWizardContext,
   patchDraftState = defaultPatchDraftState,
 }: UseEEAWizardOptions): UseEEAWizardResult {
   const [currentStep, setCurrentStep] = useState(initialStep)
   const [completedSteps, setCompletedSteps] = useState<Set<StepId>>(() => new Set())
-  const [wizardContext, setWizardContext] = useState(defaultWizardContext)
+  const [wizardContext, setWizardContext] = useState(initialWizardContext)
   const [formState, setFormState] = useState(initialFormState)
 
   const currentRegistryEntry = STEP_REGISTRY[currentStep]
   const currentStepData = formState[currentStep] ?? {}
-  const canAdvance =
+  const schemaCanAdvance =
     currentRegistryEntry?.validationSchema.safeParse(currentStepData).success ?? false
+  const canAdvance =
+    currentStep === 'section-c1'
+      ? schemaCanAdvance &&
+        wizardContext.sectionBTotals !== null &&
+        getOccupationalMatrixTotal(currentStepData) === wizardContext.sectionBTotals.grandTotal
+      : schemaCanAdvance
 
   const setStepData = useCallback((stepId: StepId, updater: StepDataUpdater): void => {
     setFormState((previous) => {
@@ -105,6 +115,17 @@ export function useEEAWizard({
       return
     }
     setCurrentStep(stepId)
+  }, [])
+
+  const updateWizardContext = useCallback((patch: Partial<WizardContext>): void => {
+    setWizardContext((previous) => ({
+      ...previous,
+      ...patch,
+      disabilityFlagActive:
+        previous.disabilityFlagActive || patch.disabilityFlagActive === true
+          ? true
+          : (patch.disabilityFlagActive ?? previous.disabilityFlagActive),
+    }))
   }, [])
 
   const back = useCallback((): void => {
@@ -178,6 +199,7 @@ export function useEEAWizard({
       advance,
       back,
       setStepData,
+      updateWizardContext,
     }),
     [
       advance,
@@ -188,6 +210,7 @@ export function useEEAWizard({
       formState,
       goToStep,
       setStepData,
+      updateWizardContext,
       wizardContext,
     ],
   )

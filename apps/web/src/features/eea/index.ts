@@ -3,13 +3,17 @@ export {
   EmployerDetailsFormSchema,
   type EmployerDetailsValues,
 } from './components/employer-details-form'
+export { PercentageSliders, type PercentageSlidersProps } from './components/PercentageSliders'
 export { EEAWizard, UNSAVED_CHANGES_WARNING, type EEAWizardProps } from './components/eea-wizard'
 export {
   STEP_IDS,
   STEP_REGISTRY,
   SECTION_A_SCHEMA,
   SECTION_B_SCHEMA,
+  SECTION_C_MATRIX_SCHEMA,
+  SECTION_D_TRAINING_SPEND_SCHEMA,
   calculateSectionBTotals,
+  createEmptyOccupationalMatrix,
 } from './wizard-step-registry'
 export {
   useEEAWizard,

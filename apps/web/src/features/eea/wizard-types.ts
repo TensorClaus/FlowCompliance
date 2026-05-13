@@ -18,6 +18,7 @@ export type WizardContext = {
 export type StepProps = {
   formId: string
   wizardContext: WizardContext
+  updateWizardContext: (patch: Partial<WizardContext>) => void
   onAdvance: () => void
 }
 

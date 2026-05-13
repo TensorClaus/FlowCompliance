@@ -4,9 +4,12 @@ import {
   ok,
   type AppendResult,
   type EEAEvent,
+  type MatrixCell,
+  type MatrixRow,
+  type OccupationalMatrix,
   type Result,
 } from '@simplifi/shared'
-import { act, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -15,6 +18,7 @@ import {
   EmployerDetailsForm,
   EVENT_EMITTER_ENDPOINT,
   PREFILL_ENDPOINT,
+  PercentageSliders,
   STEP_REGISTRY,
   UNSAVED_CHANGES_WARNING,
   extractPrefillData,
@@ -50,6 +54,53 @@ const appendResponse = (eventId: string) => ({
   eventId,
   newVersion: 3,
   projectionSyncTriggered: true,
+})
+
+const matrixCell = (value: number): MatrixCell => ({ value })
+
+const zeroMatrixRow = (): MatrixRow => ({
+  africanMale: matrixCell(0),
+  africanFemale: matrixCell(0),
+  colouredMale: matrixCell(0),
+  colouredFemale: matrixCell(0),
+  indianMale: matrixCell(0),
+  indianFemale: matrixCell(0),
+  whiteMale: matrixCell(0),
+  whiteFemale: matrixCell(0),
+  foreignNationalMale: matrixCell(0),
+  foreignNationalFemale: matrixCell(0),
+  total: matrixCell(0),
+})
+
+const zeroOccupationalMatrix = (): OccupationalMatrix => ({
+  topManagement: zeroMatrixRow(),
+  seniorManagement: zeroMatrixRow(),
+  professionallyQualified: zeroMatrixRow(),
+  skilledTechnical: zeroMatrixRow(),
+  semiSkilled: zeroMatrixRow(),
+  unskilled: zeroMatrixRow(),
+  temporaryEmployees: zeroMatrixRow(),
+  totalPermanent: zeroMatrixRow(),
+  grandTotal: zeroMatrixRow(),
+})
+
+const matrixWithHeadcount = (headcount: number): OccupationalMatrix => ({
+  ...zeroOccupationalMatrix(),
+  topManagement: {
+    ...zeroMatrixRow(),
+    africanMale: matrixCell(headcount),
+    total: matrixCell(headcount),
+  },
+  totalPermanent: {
+    ...zeroMatrixRow(),
+    africanMale: matrixCell(headcount),
+    total: matrixCell(headcount),
+  },
+  grandTotal: {
+    ...zeroMatrixRow(),
+    africanMale: matrixCell(headcount),
+    total: matrixCell(headcount),
+  },
 })
 
 const createPatchDraftState = () =>
@@ -468,10 +519,10 @@ describe('EEA hooks and wizard', () => {
     expect(Object.keys(STEP_REGISTRY)).toEqual([
       'section-a',
       'section-b',
-      'section-c-recruitment',
-      'section-c-promotions',
-      'section-c-terminations',
-      'section-d-skills',
+      'section-c1',
+      'section-c2',
+      'section-d1',
+      'section-d2',
       'section-e-sector-targets',
       'section-e-next-year-targets',
       'section-f-consultation',
@@ -483,7 +534,22 @@ describe('EEA hooks and wizard', () => {
     ])
     expect(STEP_REGISTRY['section-a']?.sectionKey).toBe('sectionA')
     expect(STEP_REGISTRY['section-b']?.sectionKey).toBe('sectionB')
+    expect(STEP_REGISTRY['section-c1']?.sectionKey).toBe('sectionC.current')
+    expect(STEP_REGISTRY['section-d2']?.sectionKey).toBe('sectionD.trainingSpend')
     expect(STEP_REGISTRY['review']?.sectionKey).toBe('review')
+  })
+
+  it('useEEAWizard exposes updateWizardContext and merges patches', () => {
+    const { result } = renderHook(() => useEEAWizard({ formId: 'form-123' }))
+
+    act(() => {
+      result.current.updateWizardContext({ disabilityFlagActive: true })
+    })
+
+    expect(result.current.wizardContext).toMatchObject({
+      disabilityFlagActive: true,
+      barrierTerminationFlag: false,
+    })
   })
 
   it('useEEAWizard gates advance on schema validity and stores Section B totals', async () => {
@@ -629,6 +695,164 @@ describe('EEA hooks and wizard', () => {
     expect(sectionBPatch.sectionKey).toBe('sectionB')
     expect(sectionBPatch.stepData).toMatchObject({
       totals: { permanent: 12, grandTotal: 12 },
+    })
+  })
+
+  it('Section C1 hard-blocks advance when workforce total mismatches Section B total', async () => {
+    const user = userEvent.setup()
+    const patchDraftState = createPatchDraftState()
+
+    render(<EEAWizard formId="form-123" patchDraftState={patchDraftState} />)
+
+    await user.type(screen.getByLabelText('Primary contact name'), 'Rivaan')
+    await user.type(screen.getByLabelText('Primary contact email'), 'rivaan@simplifi.co.za')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    await user.clear(await screen.findByLabelText('Permanent male'))
+    await user.type(screen.getByLabelText('Permanent male'), '12')
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(await screen.findByText('Step 3 of 14')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Workforce profile total (0) does not match total workforce count (12) entered in Section B.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+    expect(patchDraftState).toHaveBeenCalledTimes(2)
+  })
+
+  it('Section C1 sets the disability flag reactively and never auto-clears it', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        initialFormState={{
+          'section-b': {
+            permanent: { male: 100, female: 0 },
+            nonPermanent: { male: 0, female: 0 },
+            contract: { male: 0, female: 0 },
+            totals: { permanent: 100, nonPermanent: 0, contract: 0, grandTotal: 100 },
+          },
+          'section-c1': matrixWithHeadcount(100),
+        }}
+        initialWizardContext={{
+          disabilityFlagActive: false,
+          barrierTerminationFlag: false,
+          accommodationOverdueFlag: false,
+          sectionBTotals: { permanent: 100, nonPermanent: 0, contract: 0, grandTotal: 100 },
+        }}
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Section C - Current workforce' }))
+    expect(await screen.findByTestId('disability-flag-banner')).toBeInTheDocument()
+
+    const firstInput = screen.getAllByRole('spinbutton')[0]
+    await user.clear(firstInput as HTMLElement)
+    await user.type(firstInput as HTMLElement, '0')
+
+    expect(screen.getByTestId('disability-flag-banner')).toBeInTheDocument()
+    expect(document.querySelector('[data-dismiss]')).toBeNull()
+    expect(document.querySelector('[data-close]')).toBeNull()
+  })
+
+  it('Section C2 pre-fills latest EEA13 goals and renders blank on 404', async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.get('*/api/eea13/latest', ({ request }: { request: Request }) => {
+        const url = new URL(request.url)
+        if (url.searchParams.get('tenantId') === 'tenant-404') {
+          return HttpResponse.json({ error: 'not found' }, { status: 404 })
+        }
+
+        return HttpResponse.json({
+          sectionC: {
+            goals: matrixWithHeadcount(9),
+          },
+        })
+      }),
+    )
+
+    const { rerender } = render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        patchDraftState={createPatchDraftState()}
+        prefillOptions={{ autoLoad: false }}
+        tenantId="tenant-123"
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Section C - Numerical goals' }))
+    expect(await screen.findByDisplayValue('9')).toBeInTheDocument()
+
+    rerender(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-456"
+        patchDraftState={createPatchDraftState()}
+        prefillOptions={{ autoLoad: false }}
+        tenantId="tenant-404"
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Section C - Numerical goals' }))
+    expect(await screen.findByTestId('occupational-matrix')).toBeInTheDocument()
+    expect(screen.queryByDisplayValue('9')).not.toBeInTheDocument()
+  })
+
+  it('PercentageSliders updates labels in real time and shows invalid totals', () => {
+    const onChange = vi.fn()
+
+    render(
+      <PercentageSliders
+        groups={['African', 'Coloured', 'Indian or Asian', 'White', 'Non-designated']}
+        onChange={onChange}
+        values={[20, 20, 20, 20, 10]}
+      />,
+    )
+
+    expect(screen.getByText('African: 20%')).toBeInTheDocument()
+    expect(screen.getByText('Total: 90%')).toHaveClass('text-red-700')
+
+    fireEvent.change(screen.getByLabelText('African: 20%'), { target: { value: '34' } })
+
+    expect(onChange).toHaveBeenCalledWith([34, 20, 20, 20, 10])
+  })
+
+  it('Section D2 blocks advance until slider percentages sum to exactly 100', async () => {
+    const user = userEvent.setup()
+    const patchDraftState = createPatchDraftState()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        patchDraftState={patchDraftState}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Section D - Training spend' }))
+
+    expect(screen.getByText('Total: 0%')).toHaveClass('text-red-700')
+    expect(screen.getByText('Percentages must sum to 100%')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('African: 0%'), { target: { value: '100' } })
+    await user.type(screen.getByLabelText('Total training budget (ZAR)'), '50000')
+    await user.type(screen.getByLabelText('Training spend narrative'), 'Focused scarce-skills plan')
+
+    expect(screen.getByText('African: 100%')).toBeInTheDocument()
+    expect(screen.getByText('26 / 500')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    const sectionDPatch = getPatchDraftStateCall(patchDraftState, 0)
+    expect(sectionDPatch.sectionKey).toBe('sectionD.trainingSpend')
+    expect(sectionDPatch.stepData).toMatchObject({
+      percentages: [100, 0, 0, 0, 0],
+      totalBudget: 50_000,
     })
   })
 
