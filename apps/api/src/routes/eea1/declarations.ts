@@ -29,7 +29,7 @@
 //     touched. This is defence-in-depth on top of the KMS extension and the
 //     client-side excludeFields guard.
 
-import { EEA1DeclarationSchema } from '@simplifi/shared'
+import { EEA1DeclarationBaseSchema } from '@simplifi/shared'
 import type { FastifyInstance, FastifyRequest } from 'fastify'
 import { z } from 'zod'
 import { prisma } from '../../lib/prisma.js'
@@ -52,6 +52,28 @@ const PatchBodySchema = z
   .strict()
 
 type PatchBody = z.infer<typeof PatchBodySchema>
+
+const PostBodySchema = EEA1DeclarationBaseSchema.extend({
+  race: z.enum(['African', 'Coloured', 'Indian or Asian', 'White']).nullable().optional(),
+  gender: z.enum(['Male', 'Female']).nullable().optional(),
+  disability: z.enum(['Yes', 'No']).nullable().optional(),
+  disabilityNature: z.string().max(200).optional(),
+  reasonableAccommodation: z.boolean().optional(),
+  signatureDataUrl: z.string().min(1),
+  declarationDate: z.string().date().optional(),
+})
+  .strict()
+  .superRefine((data, ctx) => {
+    if (data.foreignNational && !data.citizenshipDate) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['citizenshipDate'],
+        message: 'Citizenship/permanent residence date is required for foreign nationals',
+      })
+    }
+  })
+
+type PostBody = z.infer<typeof PostBodySchema>
 
 // Whitelist of PATCH-able field names — derived from the schema so the two
 // cannot drift. Used for event emission ordering.
@@ -210,11 +232,11 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
   app.post<{ Body: unknown }>('/eea1', { preHandler: [requireAuth] }, async (request, reply) => {
     // Full schema with superRefine cross-field validation (foreignNational
     // requires citizenshipDate). Rejects unknown keys defensively.
-    const parsed = EEA1DeclarationSchema.safeParse(request.body)
+    const parsed = PostBodySchema.safeParse(request.body)
     if (!parsed.success) {
       return reply.status(400).send({ error: 'Invalid request body' })
     }
-    const body = parsed.data
+    const body: PostBody = parsed.data
 
     // Identity-bind: a user may file a declaration only for themselves.
     // Crossing this boundary is 403 — the row's owner field is the
@@ -231,14 +253,10 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
     // The KMS extension encrypts race/gender/disability/disabilityNature/
     // signatureDataUrl in-place before the Prisma adapter hands the row to
     // Postgres. We must NOT pre-encrypt here — that would double-encrypt.
-    // signatureDataUrl is required on the model but optional on the Zod
-    // schema (the schema covers only the five non-PII edit fields). The
-    // POST handler here accepts the schema as a baseline; full PII payloads
-    // are handled by the consent-gated submit path which extends this body.
-    // For this route we coerce signatureDataUrl to a placeholder ONLY if
-    // the caller did not supply one — but in practice the full submit
-    // payload always includes it. Cast `as never` keeps TypeScript happy
-    // without re-declaring the model contract here.
+    // This consent-gated submit path requires signatureDataUrl and accepts
+    // the demographic fields that are explicitly barred from PATCH autosave.
+    // Cast `as never` keeps TypeScript happy without re-declaring the model
+    // contract here.
     const created = await prisma.eea1Declaration.create({
       data: {
         ...(body as Record<string, unknown>),
