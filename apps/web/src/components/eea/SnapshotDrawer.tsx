@@ -1,9 +1,36 @@
-import type { OccupationalMatrix as OccupationalMatrixData } from '@simplifi/shared'
-import { clsx } from 'clsx'
-import { useEffect, useRef, useState } from 'react'
-import { OccupationalMatrix } from '../../features/eea/components/occupational-matrix/OccupationalMatrix'
+// SnapshotDrawer — right-side drawer that replays an EEA2 form to a historical
+// point in time and displays the materialised snapshot.
+//
+// Security constraints (non-negotiable):
+//   - POST body contains only { toEventId }. tenantId is NEVER sent from the
+//     client; RLS enforces tenant isolation at the API layer.
+//   - The amber banner is the first element inside the drawer panel and has no
+//     dismiss mechanism — it must always be visible when snapshot data is shown.
+//
+// Fetch behaviour:
+//   - POST /eea2/:formId/replay fires only when open transitions false → true.
+//   - A new fetch fires if eventId or formId changes while the drawer is open.
+//   - In-flight requests are aborted on cleanup to prevent stale state.
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import type { OccupationalMatrix as OccupationalMatrixData } from '@simplifi/shared'
+import { useEffect, useRef, useState, type ReactElement } from 'react'
+import { OccupationalMatrix } from '@/features/eea/components/occupational-matrix/OccupationalMatrix'
+import { cn } from '@/lib/utils'
+
+// Format a Date as "dd MMM yyyy HH:mm" without date-fns (not installed).
+// Example: 09 May 2026 14:30
+function formatSnapshotDate(date: Date): string {
+  const dd = String(date.getDate()).padStart(2, '0')
+  const mmm = date.toLocaleString('en-ZA', { month: 'short' })
+  const yyyy = String(date.getFullYear())
+  const hh = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  return `${dd} ${mmm} ${yyyy} ${hh}:${min}`
+}
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 export interface SnapshotDrawerProps {
   eventId: string
@@ -14,115 +41,17 @@ export interface SnapshotDrawerProps {
   onClose: () => void
 }
 
-interface SnapshotState {
+// The replay endpoint returns the materialised EEA2Report state object.
+// We narrow only the fields we need to render; unknown extras are ignored.
+interface ReplaySnapshot {
   sectionC?: OccupationalMatrixData
   [key: string]: unknown
 }
 
-interface ReplayResponse {
-  formId: string
-  tenantId: string
-  snapshotAt: string
-  replayedToEventId: string
-  state: SnapshotState
-}
+// ---------------------------------------------------------------------------
+// SnapshotDrawer
+// ---------------------------------------------------------------------------
 
-type DrawerState =
-  | { status: 'idle' }
-  | { status: 'loading' }
-  | { status: 'success'; snapshot: ReplayResponse }
-  | { status: 'error'; message: string }
-
-// ─── Helpers ─────────────────────────────────────────────────────────────────
-
-const isRecord = (v: unknown): v is Record<string, unknown> =>
-  typeof v === 'object' && v !== null && !Array.isArray(v)
-
-function formatTimestamp(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString('en-ZA', {
-      year: 'numeric',
-      month: 'short',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
-  } catch {
-    return iso
-  }
-}
-
-// ─── Skeleton ────────────────────────────────────────────────────────────────
-
-function SkeletonBlock({ className }: { className?: string }): React.ReactElement {
-  return <div className={clsx('animate-pulse rounded bg-slate-200', className)} />
-}
-
-// ─── Amber banner — non-dismissable compliance notice ────────────────────────
-
-function HistoricalBanner(): React.ReactElement {
-  return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="flex items-center gap-2 bg-amber-50 px-5 py-3 border-b border-amber-200"
-    >
-      <span className="text-amber-600 text-base" aria-hidden="true">
-        ⚠
-      </span>
-      <p className="text-sm font-medium text-amber-800">Historical snapshot — not current data</p>
-    </div>
-  )
-}
-
-// ─── Key-value section renderer ───────────────────────────────────────────────
-
-function SectionDl({
-  title,
-  data,
-}: {
-  title: string
-  data: Record<string, unknown>
-}): React.ReactElement {
-  const entries = Object.entries(data).filter(([, v]) => v !== null && v !== undefined)
-
-  if (entries.length === 0) return <></>
-
-  return (
-    <section className="flex flex-col gap-2">
-      <h3 className="text-sm font-semibold text-slate-700">{title}</h3>
-      <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        {entries.map(([key, value]) => (
-          <div key={key} className="contents">
-            <dt className="text-slate-500 capitalize">
-              {key.replaceAll(/([A-Z])/g, ' $1').trim()}
-            </dt>
-            <dd className="text-slate-800 break-all">
-              {value === null || value === undefined
-                ? '—'
-                : typeof value === 'object'
-                  ? JSON.stringify(value)
-                  : String(value as string | number | boolean)}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </section>
-  )
-}
-
-// ─── SnapshotDrawer ───────────────────────────────────────────────────────────
-
-/**
- * SnapshotDrawer — slide-over panel that replays the EEA2 event stream to a
- * historical point and renders a frozen snapshot of the form state.
- *
- * COMPLIANCE INVARIANTS:
- *  - The amber "Historical snapshot" banner is always the first visible element
- *    inside the sheet, rendered unconditionally with no dismiss affordance.
- *  - OccupationalMatrix is rendered with mode="locked" so no edits are possible.
- *  - tenantId is never passed in the request body; RLS handles tenant isolation.
- */
 export function SnapshotDrawer({
   eventId,
   timestamp,
@@ -130,183 +59,199 @@ export function SnapshotDrawer({
   formId,
   open,
   onClose,
-}: SnapshotDrawerProps): React.ReactElement {
-  const [drawerState, setDrawerState] = useState<DrawerState>({ status: 'idle' })
-  const abortRef = useRef<AbortController | null>(null)
+}: SnapshotDrawerProps): ReactElement {
+  const [snapshot, setSnapshot] = useState<ReplaySnapshot | null>(null)
+  const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
-  // Fetch replay on open
+  // Track the previous open value so we can detect false → true transitions.
+  const prevOpenRef = useRef(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
+
+  // Fire POST /eea2/:formId/replay only when open transitions false → true.
   useEffect(() => {
-    if (!open) {
-      setDrawerState({ status: 'idle' })
-      return
-    }
+    const wasOpen = prevOpenRef.current
+    prevOpenRef.current = open
 
-    // Cancel any in-flight request
-    abortRef.current?.abort()
+    // Only fetch on the false → true transition.
+    if (!open || wasOpen) return
+
+    abortControllerRef.current?.abort()
     const controller = new AbortController()
-    abortRef.current = controller
+    abortControllerRef.current = controller
 
-    setDrawerState({ status: 'loading' })
+    setIsLoading(true)
+    setError(null)
+    setSnapshot(null)
 
-    void (async () => {
-      try {
-        const response = await fetch(`/eea2/${encodeURIComponent(formId)}/replay`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ toEventId: eventId }),
-          signal: controller.signal,
-        })
-
-        if (controller.signal.aborted) return
-
+    // tenantId is intentionally absent from the body — RLS handles isolation.
+    fetch(`/eea2/${formId}/replay`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ toEventId: eventId }),
+      signal: controller.signal,
+    })
+      .then(async (response) => {
         if (!response.ok) {
-          const body: unknown = await response.json().catch(() => null)
-          const message =
-            isRecord(body) && typeof body['error'] === 'string'
-              ? body['error']
-              : `Replay failed with status ${String(response.status)}`
-          setDrawerState({ status: 'error', message })
-          return
+          throw new Error(`Replay failed with status ${response.status.toString()}`)
         }
-
-        const payload: unknown = await response.json()
-        if (!isRecord(payload)) {
-          setDrawerState({ status: 'error', message: 'Unexpected response from replay API' })
-          return
-        }
-
-        setDrawerState({
-          status: 'success',
-          snapshot: payload as unknown as ReplayResponse,
-        })
-      } catch (error) {
-        if (controller.signal.aborted) return
-        const message = error instanceof Error ? error.message : 'Failed to load snapshot'
-        setDrawerState({ status: 'error', message })
-      }
-    })()
+        return response.json() as Promise<ReplaySnapshot>
+      })
+      .then((data) => {
+        setSnapshot(data)
+        setIsLoading(false)
+      })
+      .catch((error_: unknown) => {
+        if (error_ instanceof DOMException && error_.name === 'AbortError') return
+        const message = error_ instanceof Error ? error_.message : 'Failed to load snapshot'
+        setError(message)
+        setIsLoading(false)
+      })
 
     return () => {
       controller.abort()
     }
   }, [open, eventId, formId])
 
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return
-    const handleKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    globalThis.addEventListener('keydown', handleKey)
-    return () => {
-      globalThis.removeEventListener('keydown', handleKey)
-    }
-  }, [open, onClose])
+  // Format the timestamp for the header.
+  const formattedAt = formatSnapshotDate(new Date(timestamp))
 
-  if (!open) return <></>
-
-  const formattedTimestamp = formatTimestamp(timestamp)
-  const sectionC =
-    drawerState.status === 'success' ? drawerState.snapshot.state.sectionC : undefined
-
-  const otherSections =
-    drawerState.status === 'success'
-      ? Object.entries(drawerState.snapshot.state).filter(
-          ([key, value]) => key !== 'sectionC' && isRecord(value),
+  // Collect non-sectionC fields for the generic dl rendering.
+  const otherEntries =
+    snapshot === null
+      ? []
+      : Object.entries(snapshot).filter(
+          ([key]) => key !== 'sectionC' && snapshot[key] !== undefined,
         )
-      : []
 
   return (
     <>
-      {/* Backdrop */}
-      <div aria-hidden="true" className="fixed inset-0 z-40 bg-black/30" onClick={onClose} />
-
-      {/* Sheet — 60vw wide, right side */}
+      {/* Fixed overlay — closes on click */}
       <div
-        role="dialog"
-        aria-modal="true"
-        aria-label={`Snapshot as of ${formattedTimestamp}`}
-        className={clsx(
-          'fixed inset-y-0 right-0 z-50 flex w-[60vw] flex-col bg-white shadow-2xl',
-          'overflow-hidden',
+        className={cn(
+          'fixed inset-0 z-40 bg-black/40 transition-opacity',
+          open ? 'opacity-100' : 'opacity-0 pointer-events-none',
         )}
-      >
-        {/* AMBER BANNER — must be first visible element, no dismiss affordance */}
-        <HistoricalBanner />
+        onClick={onClose}
+      />
 
-        {/* Header */}
-        <div className="flex items-start justify-between border-b border-slate-200 px-5 py-4">
-          <div className="flex flex-col gap-0.5">
-            <h2 className="text-base font-semibold text-slate-900">
-              Snapshot as of {formattedTimestamp}
-            </h2>
-            <p className="text-sm text-slate-500">{userName}</p>
-          </div>
+      {/* Drawer panel */}
+      <div
+        aria-label="Historical snapshot drawer"
+        aria-modal="true"
+        className={cn(
+          'fixed right-0 top-0 z-50 h-full w-[60vw] bg-white shadow-xl',
+          'transform transition-transform duration-300',
+          'flex flex-col overflow-hidden',
+          open ? 'translate-x-0' : 'translate-x-full',
+        )}
+        role="dialog"
+      >
+        {/* ── Amber banner — FIRST element, no dismiss, always sticky ──────── */}
+        <div
+          className="sticky top-0 z-10 bg-amber-100 border-b border-amber-300 px-4 py-2 text-sm text-amber-900"
+          data-testid="snapshot-banner"
+        >
+          Historical snapshot — not current data
+        </div>
+
+        {/* ── Header ───────────────────────────────────────────────────────── */}
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-4">
+          <h2 className="text-base font-semibold text-slate-900">
+            Snapshot as of {formattedAt} — {userName}
+          </h2>
+
+          {/* Close button */}
           <button
-            type="button"
-            onClick={onClose}
             aria-label="Close snapshot drawer"
-            className={clsx(
-              'rounded-md p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-600',
-              'transition-colors',
+            className={cn(
+              'rounded-md border border-slate-300 p-1.5 text-slate-600',
+              'hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1',
             )}
+            data-testid="snapshot-drawer-close"
+            onClick={onClose}
+            type="button"
           >
             <svg
               aria-hidden="true"
-              className="h-5 w-5"
+              className="h-4 w-4"
               fill="none"
-              viewBox="0 0 24 24"
               stroke="currentColor"
               strokeWidth={2}
+              viewBox="0 0 24 24"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              <path d="M6 18L18 6M6 6l12 12" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </button>
         </div>
 
-        {/* Scrollable content */}
-        <div className="flex-1 overflow-y-auto px-5 py-5 flex flex-col gap-6">
-          {drawerState.status === 'loading' && (
-            <>
-              <SkeletonBlock className="h-6 w-48" />
-              <SkeletonBlock className="h-48 w-full" />
-              <SkeletonBlock className="h-32 w-full" />
-            </>
-          )}
-
-          {drawerState.status === 'error' && (
-            <div
-              role="alert"
-              className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
-            >
-              {drawerState.message}
+        {/* ── Scrollable content area ───────────────────────────────────────── */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* Loading state */}
+          {isLoading && (
+            <div aria-live="polite" className="flex flex-col gap-3" data-testid="snapshot-loading">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div className="h-8 animate-pulse rounded bg-slate-200" key={i} />
+              ))}
             </div>
           )}
 
-          {drawerState.status === 'success' && (
-            <>
-              {/* Section C — Occupational Matrix in locked (read-only) mode */}
-              {sectionC !== undefined && (
-                <section className="flex flex-col gap-2">
-                  <h3 className="text-sm font-semibold text-slate-700">
+          {/* Error state */}
+          {!isLoading && error !== null && (
+            <p
+              aria-live="assertive"
+              className="rounded-md border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+              data-testid="snapshot-error"
+              role="alert"
+            >
+              {error}
+            </p>
+          )}
+
+          {/* Snapshot content */}
+          {!isLoading && error === null && snapshot !== null && (
+            <div className="flex flex-col gap-6">
+              {/* Section C — Occupational Matrix */}
+              {snapshot.sectionC !== undefined && (
+                <section aria-labelledby="snapshot-section-c-title">
+                  <h3
+                    className="mb-3 text-sm font-semibold text-slate-700"
+                    id="snapshot-section-c-title"
+                  >
                     Section C — Workforce Profile
                   </h3>
-                  <OccupationalMatrix mode="locked" data={sectionC} isDesignatedEmployer={true} />
+                  <OccupationalMatrix
+                    data={snapshot.sectionC}
+                    isDesignatedEmployer={false}
+                    mode="view"
+                  />
                 </section>
               )}
 
-              {/* Other sections — key-value display */}
-              {otherSections.map(([key, value]) => (
-                <SectionDl
-                  key={key}
-                  title={key
-                    .replaceAll(/([A-Z])/g, ' $1')
-                    .replace(/^./, (c) => c.toUpperCase())
-                    .trim()}
-                  data={value as Record<string, unknown>}
-                />
-              ))}
-            </>
+              {/* Other sections — generic key/value pairs */}
+              {otherEntries.length > 0 && (
+                <section aria-labelledby="snapshot-other-title">
+                  <h3
+                    className="mb-3 text-sm font-semibold text-slate-700"
+                    id="snapshot-other-title"
+                  >
+                    Other fields
+                  </h3>
+                  <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+                    {otherEntries.map(([key, value]) => (
+                      <div className="contents" key={key}>
+                        <dt className="font-medium text-slate-600">{key}</dt>
+                        <dd className="text-slate-900">
+                          {typeof value === 'object'
+                            ? JSON.stringify(value)
+                            : String((value as string | number | boolean | null | undefined) ?? '')}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              )}
+            </div>
           )}
         </div>
       </div>

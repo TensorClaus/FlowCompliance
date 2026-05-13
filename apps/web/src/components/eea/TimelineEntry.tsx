@@ -1,133 +1,77 @@
-import type { EEAEvent } from '@simplifi/shared'
-import { FIELD_LABELS, PII_FIELD_PATHS } from '@simplifi/shared'
-import { cn } from '../../lib/utils'
+import { PII_FIELD_PATHS } from '@simplifi/shared/eea/pii-fields'
+import { type ReactElement } from 'react'
+import { cn } from '@/lib/utils'
 
-const PROTECTED_PLACEHOLDER = '[Protected field]'
+// Client-side PII guard — defence-in-depth on top of server-side stripping.
+// If a fieldPath is in the PII registry, we display a placeholder rather than
+// the raw path name, preventing accidental exposure in the audit timeline.
+const PII_PATH_SET = new Set<string>(PII_FIELD_PATHS)
 
-/**
- * formatRelativeTime — relative timestamp without date-fns dependency.
- * Returns a human-readable string like "3 minutes ago" or "2 days ago".
- */
-function formatRelativeTime(date: Date): string {
-  const nowMs = Date.now()
-  const diffMs = nowMs - date.getTime()
-  const diffSeconds = Math.floor(diffMs / 1000)
-
-  if (diffSeconds < 60) return 'less than a minute ago'
-  const diffMinutes = Math.floor(diffSeconds / 60)
-  if (diffMinutes < 60) return `${String(diffMinutes)} minute${diffMinutes === 1 ? '' : 's'} ago`
-  const diffHours = Math.floor(diffMinutes / 60)
-  if (diffHours < 24) return `${String(diffHours)} hour${diffHours === 1 ? '' : 's'} ago`
-  const diffDays = Math.floor(diffHours / 24)
-  if (diffDays < 30) return `${String(diffDays)} day${diffDays === 1 ? '' : 's'} ago`
-  const diffMonths = Math.floor(diffDays / 30)
-  if (diffMonths < 12) return `${String(diffMonths)} month${diffMonths === 1 ? '' : 's'} ago`
-  const diffYears = Math.floor(diffMonths / 12)
-  return `${String(diffYears)} year${diffYears === 1 ? '' : 's'} ago`
+function safeFieldPath(fieldPath: string | null): string | null {
+  if (fieldPath === null) return null
+  return PII_PATH_SET.has(fieldPath) ? '[Protected field]' : fieldPath
 }
 
-/**
- * safeStringify — converts an unknown field value to a display string.
- * Avoids rendering [object Object] for complex values.
- */
-function safeStringify(value: unknown): string {
-  if (value === null || value === undefined) return '—'
-  if (typeof value === 'string') return value
-  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
-  return JSON.stringify(value)
-}
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
-interface TimelineEntryProps {
-  event: EEAEvent
+export interface TimelineEntryProps {
+  eventId: string
+  eventType: string
+  fieldPath: string | null
+  timestamp: string
+  triggeredBy: string
   onViewSnapshot?: (eventId: string) => void
 }
 
-/**
- * TimelineEntry — renders a single audit event row in the AuditHistoryPanel.
- *
- * PII GUARD: if fieldPath is in PII_FIELD_PATHS, both prevValue and newValue
- * are unconditionally replaced with PROTECTED_PLACEHOLDER. This is a
- * compliance control — there is no prop, environment variable, or code path
- * that bypasses it.
- */
-export function TimelineEntry({ event, onViewSnapshot }: TimelineEntryProps): React.ReactElement {
-  const { eventType, fieldPath, previousValue, newValue, timestamp, metadata } = event
+// ---------------------------------------------------------------------------
+// TimelineEntry
+//
+// A single row in the EEA audit event timeline. Renders event metadata and
+// exposes a "View snapshot" action that calls onViewSnapshot with the eventId,
+// allowing the parent to open the SnapshotDrawer for point-in-time replay.
+// ---------------------------------------------------------------------------
 
-  const isoTimestamp = timestamp instanceof Date ? timestamp.toISOString() : String(timestamp)
-  const relativeTime = formatRelativeTime(
-    timestamp instanceof Date ? timestamp : new Date(timestamp),
-  )
-
-  // Strip email addresses from userName to avoid rendering PII.
-  // metadata.triggeredBy is a userId; we display it but ensure no @ symbol
-  // appears (userId should never be an email, but this is a hard guard).
-  const displayUser = metadata.triggeredBy.includes('@')
-    ? metadata.triggeredBy.split('@')[0]
-    : metadata.triggeredBy
-
-  const fieldLabel = fieldPath === null ? null : (FIELD_LABELS[fieldPath] ?? fieldPath)
-
-  // PII GUARD — unconditional; no bypass
-  const isPiiField = fieldPath !== null && PII_FIELD_PATHS.includes(fieldPath)
-  const displayPrev = isPiiField ? PROTECTED_PLACEHOLDER : safeStringify(previousValue)
-  const displayNext = isPiiField ? PROTECTED_PLACEHOLDER : safeStringify(newValue)
-
-  const hasDiff = fieldPath !== null && (previousValue !== null || newValue !== null)
-
+export function TimelineEntry({
+  eventId,
+  eventType,
+  fieldPath,
+  timestamp,
+  triggeredBy,
+  onViewSnapshot,
+}: TimelineEntryProps): ReactElement {
   return (
     <li
-      className={cn(
-        'flex flex-col gap-1 rounded-md border border-slate-100 bg-white px-4 py-3',
-        'transition-colors hover:bg-slate-50',
-      )}
+      className="flex items-start justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
+      data-testid={`timeline-entry-${eventId}`}
     >
-      <div className="flex items-center justify-between gap-2">
-        <span
-          className={cn(
-            'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium',
-            'bg-slate-100 text-slate-700',
-          )}
-        >
-          {eventType}
-        </span>
-        <time
-          className="shrink-0 text-xs text-slate-400"
-          dateTime={isoTimestamp}
-          title={isoTimestamp}
-        >
-          {relativeTime}
-        </time>
-      </div>
-
-      {fieldLabel !== null && <p className="text-sm font-medium text-slate-800">{fieldLabel}</p>}
-
-      {hasDiff && (
-        <p className="break-all text-xs text-slate-600">
-          <span className="line-through text-red-500">{displayPrev}</span>
-          <span className="mx-1 text-slate-400">→</span>
-          <span className="text-emerald-600">{displayNext}</span>
-        </p>
-      )}
-
-      <div className="flex items-center justify-between gap-2">
-        <p className="text-xs text-slate-400">by {displayUser}</p>
-        {onViewSnapshot !== undefined && (
-          <button
-            type="button"
-            onClick={() => {
-              onViewSnapshot(event.eventId)
-            }}
-            className={cn(
-              'rounded px-2 py-0.5 text-xs font-medium',
-              'text-slate-500 hover:text-slate-700',
-              'border border-slate-200 hover:bg-slate-50',
-              'transition-colors',
-            )}
-          >
-            View snapshot
-          </button>
+      <div className="flex flex-col gap-0.5 min-w-0">
+        <span className="font-medium text-slate-900">{eventType}</span>
+        {fieldPath !== null && (
+          <span className="truncate text-xs text-slate-500">{safeFieldPath(fieldPath)}</span>
         )}
+        <span className="text-xs text-slate-400">
+          {new Date(timestamp).toLocaleString()} — {triggeredBy}
+        </span>
       </div>
+
+      {onViewSnapshot !== undefined && (
+        <button
+          className={cn(
+            'shrink-0 self-start rounded-md border border-slate-300 px-3 py-1.5',
+            'text-xs font-medium text-slate-700 whitespace-nowrap',
+            'hover:bg-slate-100 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-1',
+          )}
+          data-testid={`view-snapshot-${eventId}`}
+          onClick={() => {
+            onViewSnapshot(eventId)
+          }}
+          type="button"
+        >
+          View snapshot
+        </button>
+      )}
     </li>
   )
 }
