@@ -17,6 +17,7 @@ export default tseslint.config(
       '**/playwright.config.ts',
       '**/prisma.config.ts',
       '**/prisma/seed.ts',
+      '**/generated/**',
     ],
   },
   js.configs.recommended,
