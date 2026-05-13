@@ -2,6 +2,10 @@ import type { FastifyInstance } from 'fastify'
 
 // ─── Route registration ───────────────────────────────────────────────────────
 
+// GET /eea1/:id, POST /eea1, and PATCH /eea1/:id are implemented in
+// ./eea1/declarations.ts and registered in app.ts via eea1DeclarationsRoutes.
+// Only the list endpoint remains here as a stub.
+
 export function eea1Routes(app: FastifyInstance): void {
   /**
    * GET /eea1
@@ -12,36 +16,6 @@ export function eea1Routes(app: FastifyInstance): void {
    * Not yet implemented.
    */
   app.get('/eea1', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
-  })
-
-  /**
-   * GET /eea1/:id
-   *
-   * Retrieve a single EEA1 declaration by ID.
-   * Not yet implemented.
-   */
-  app.get<{ Params: { id: string } }>('/eea1/:id', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
-  })
-
-  /**
-   * POST /eea1
-   *
-   * Create a new EEA1 declaration for the authenticated tenant.
-   * Not yet implemented.
-   */
-  app.post<{ Body: unknown }>('/eea1', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
-  })
-
-  /**
-   * PUT /eea1/:id
-   *
-   * Update an existing EEA1 declaration by ID.
-   * Not yet implemented.
-   */
-  app.put<{ Params: { id: string }; Body: unknown }>('/eea1/:id', async (_request, reply) => {
     return reply.status(501).send({ error: 'Not Implemented' })
   })
 }

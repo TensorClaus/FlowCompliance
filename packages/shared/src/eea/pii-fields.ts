@@ -1,19 +1,72 @@
 /**
- * PII_FIELD_PATHS — field paths that contain personally identifiable or
- * sensitive employment information under POPIA and the EEA.
+ * PII_FIELD_PATHS — exhaustive list of EEA event fieldPath values that contain
+ * personally identifiable information under POPIA s.1 definitions.
  *
- * This list is a compliance control. It MUST NOT be mutated at runtime.
- * Any component or utility that renders field diffs MUST check membership
- * before displaying a value, with no bypass path.
+ * These paths correspond to fields that carry individual employee demographic
+ * data (race, gender, disability status, salary, citizenship) stored on EEA
+ * form field paths in the event stream.
  *
- * Covers: race, gender, disability attributes, biometric/signature data,
- * and remuneration values that could re-identify individuals.
+ * SECURITY: This list is server-side only. Before sending any EEAEvent over
+ * the wire, prevValue and newValue MUST be nulled for any event whose
+ * fieldPath appears in this list. Raw values must never leave the API server.
+ *
+ * @see POPIA s.1 — definition of personal information
+ * @see rule_eea_006 — designated group classification obligations
+ * @see rule_eea_018 — income differential report (EEA4)
+ * @see rule_eea_019 — Gini coefficient income data
  */
 export const PII_FIELD_PATHS: readonly string[] = [
-  'gender',
+  // EEA1 — individual employee declarations (race, gender, disability, citizenship)
   'race',
+  'gender',
   'disability',
-  'disabilityNature',
-  'signatureDataUrl',
-  'medianRemuneration',
-] as const
+  'disabilityCategory',
+  'citizenship',
+  'nationalId',
+  'passportNumber',
+  'dateOfBirth',
+  'employeeId',
+  'employeeName',
+  'firstName',
+  'lastName',
+  'fullName',
+  'email',
+  'phone',
+  'address',
+
+  // EEA4 — individual salary / CTC data per employee
+  'salary',
+  'ctc',
+  'annualCTC',
+  'monthlyCtc',
+  'basicSalary',
+  'totalRemuneration',
+  'remunerationAmount',
+  'incomeAmount',
+  'payrollRef',
+
+  // EEA1 declaration form personal details section
+  'personalDetails.race',
+  'personalDetails.gender',
+  'personalDetails.disability',
+  'personalDetails.disabilityCategory',
+  'personalDetails.citizenship',
+  'personalDetails.nationalId',
+  'personalDetails.passportNumber',
+  'personalDetails.dateOfBirth',
+  'personalDetails.firstName',
+  'personalDetails.lastName',
+  'personalDetails.fullName',
+  'personalDetails.email',
+  'personalDetails.phone',
+
+  // Remuneration paths nested inside EEA4 sections
+  'sectionD.salary',
+  'sectionD.ctc',
+  'sectionD.annualCTC',
+  'sectionD.monthlyCtc',
+  'sectionD.basicSalary',
+  'sectionD.totalRemuneration',
+  'sectionD.remunerationAmount',
+  'sectionD.incomeAmount',
+]
