@@ -15,10 +15,13 @@ import {
   EmployerDetailsForm,
   EVENT_EMITTER_ENDPOINT,
   PREFILL_ENDPOINT,
+  STEP_REGISTRY,
   UNSAVED_CHANGES_WARNING,
   extractPrefillData,
   useEEAAutosave,
+  useEEAWizard,
   usePrefill,
+  type PatchDraftStateInput,
   type UseEEAAutosaveOptions,
 } from '..'
 import { server } from '@/test/server'
@@ -49,14 +52,18 @@ const appendResponse = (eventId: string) => ({
   projectionSyncTriggered: true,
 })
 
-const fillEmployerDetails = async (user: ReturnType<typeof userEvent.setup>): Promise<void> => {
-  await user.type(screen.getByLabelText('Trade name'), 'Simplifi SA')
-  await user.type(screen.getByLabelText('DTI registration name'), 'Simplifi Holdings')
-  await user.type(screen.getByLabelText('DTI registration number'), 'DTI-2026-001')
-  await user.type(screen.getByLabelText('PAYE SARS number'), 'PAYE-4455')
-  await user.type(screen.getByLabelText('CEO name'), 'Rivaan')
-  await user.type(screen.getByLabelText('CEO email'), 'ceo@simplifi.co.za')
-  await user.selectOptions(screen.getByLabelText('EAP type'), 'national')
+const createPatchDraftState = () =>
+  vi.fn((_input: PatchDraftStateInput): Promise<void> => Promise.resolve())
+
+const getPatchDraftStateCall = (
+  patchDraftState: ReturnType<typeof createPatchDraftState>,
+  index: number,
+): PatchDraftStateInput => {
+  const call = patchDraftState.mock.calls[index]?.[0]
+  if (call === undefined) {
+    throw new Error(`Expected patchDraftState call ${String(index)} to exist`)
+  }
+  return call
 }
 
 describe('EEA hooks and wizard', () => {
@@ -350,6 +357,11 @@ describe('EEA hooks and wizard', () => {
 
     const prefillData = result.current.data
     expect(prefillData?.employerProfile?.tradeName).toBe('Simplifi SA')
+    expect(prefillData?.sectionAReadOnly).toMatchObject({
+      registrationNumber: 'DTI-55',
+      sector: 'Software',
+      province: 'gauteng',
+    })
     expect(prefillData?.barrierCategories).toHaveLength(1)
     expect(prefillData).not.toHaveProperty('workforceProfile')
     expect(JSON.stringify(prefillData)).not.toContain('workforceProfile')
@@ -405,7 +417,16 @@ describe('EEA hooks and wizard', () => {
     })
     expect(extracted.employerProfile).toBeNull()
     expect(extracted.barrierCategories).toHaveLength(1)
-    expect(extractPrefillData(null)).toEqual({ employerProfile: null, barrierCategories: [] })
+    expect(extractPrefillData(null)).toEqual({
+      employerProfile: null,
+      sectionAReadOnly: {
+        registrationNumber: '',
+        sector: '',
+        province: '',
+        totalEmployeesPriorYear: 0,
+      },
+      barrierCategories: [],
+    })
   })
 
   it('usePrefill aborts the previous request before reloading', async () => {
@@ -443,19 +464,185 @@ describe('EEA hooks and wizard', () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
+  it('exports a 14-step EEA2 registry with Sections A-H and Review', () => {
+    expect(Object.keys(STEP_REGISTRY)).toEqual([
+      'section-a',
+      'section-b',
+      'section-c-recruitment',
+      'section-c-promotions',
+      'section-c-terminations',
+      'section-d-skills',
+      'section-e-sector-targets',
+      'section-e-next-year-targets',
+      'section-f-consultation',
+      'section-f-barriers',
+      'section-g-monitoring',
+      'section-h-declaration',
+      'section-h-hitl',
+      'review',
+    ])
+    expect(STEP_REGISTRY['section-a']?.sectionKey).toBe('sectionA')
+    expect(STEP_REGISTRY['section-b']?.sectionKey).toBe('sectionB')
+    expect(STEP_REGISTRY['review']?.sectionKey).toBe('review')
+  })
+
+  it('useEEAWizard gates advance on schema validity and stores Section B totals', async () => {
+    const patchDraftState = createPatchDraftState()
+    const { result } = renderHook(() =>
+      useEEAWizard({
+        formId: 'form-123',
+        patchDraftState,
+      }),
+    )
+
+    expect(result.current.currentStep).toBe('section-a')
+    expect(result.current.canAdvance).toBe(false)
+
+    act(() => {
+      result.current.setStepData('section-a', {
+        registrationNumber: 'DTI-55',
+        sector: 'Software',
+        province: 'gauteng',
+        totalEmployeesPriorYear: 100,
+        primaryContactName: 'Rivaan',
+        primaryContactEmail: 'invalid-email',
+        reportingYear: 2026,
+      })
+    })
+    expect(result.current.canAdvance).toBe(false)
+
+    act(() => {
+      result.current.setStepData('section-a', {
+        registrationNumber: 'DTI-55',
+        sector: 'Software',
+        province: 'gauteng',
+        totalEmployeesPriorYear: 100,
+        primaryContactName: 'Rivaan',
+        primaryContactEmail: 'rivaan@simplifi.co.za',
+        reportingYear: 2026,
+      })
+    })
+    expect(result.current.canAdvance).toBe(true)
+
+    await act(async () => {
+      await result.current.advance()
+    })
+
+    expect(result.current.currentStep).toBe('section-b')
+    expect(result.current.completedSteps.has('section-a')).toBe(true)
+    const sectionAPatch = getPatchDraftStateCall(patchDraftState, 0)
+    expect(sectionAPatch.formId).toBe('form-123')
+    expect(sectionAPatch.stepId).toBe('section-a')
+    expect(sectionAPatch.sectionKey).toBe('sectionA')
+    expect(sectionAPatch.stepData).toMatchObject({
+      primaryContactEmail: 'rivaan@simplifi.co.za',
+    })
+
+    act(() => {
+      result.current.setStepData('section-b', {
+        permanent: { male: 2, female: 3 },
+        nonPermanent: { male: 4, female: 1 },
+        contract: { male: 6, female: 7 },
+      })
+    })
+    expect(result.current.canAdvance).toBe(true)
+
+    await act(async () => {
+      await result.current.advance()
+    })
+
+    expect(result.current.wizardContext.sectionBTotals).toEqual({
+      permanent: 5,
+      nonPermanent: 5,
+      contract: 13,
+      grandTotal: 23,
+    })
+  })
+
+  it('EEAWizard shows the 14-step shell, blocks empty Section A email, and computes Section B totals', async () => {
+    const user = userEvent.setup()
+    const patchDraftState = createPatchDraftState()
+    server.use(
+      http.get(`*${PREFILL_ENDPOINT}`, () =>
+        HttpResponse.json({
+          report: {
+            employerProfile: {
+              registeredName: 'Simplifi Holdings',
+              companyRegNumber: 'REG-2026-001',
+              sectorCode: 'Technology',
+              province: 'gauteng',
+              totalEmployees: 42,
+            },
+          },
+        }),
+      ),
+    )
+
+    render(
+      <EEAWizard
+        formId="form-123"
+        tenantId="tenant-123"
+        reportingYear={2026}
+        patchDraftState={patchDraftState}
+      />,
+    )
+
+    expect(await screen.findByDisplayValue('REG-2026-001')).toHaveAttribute('readOnly')
+    expect(screen.getByDisplayValue('Technology')).toHaveAttribute('readOnly')
+    expect(screen.getByDisplayValue('gauteng')).toHaveAttribute('readOnly')
+    expect(screen.getByDisplayValue('42')).toHaveAttribute('readOnly')
+    expect(screen.getByText('Step 1 of 14')).toBeInTheDocument()
+
+    const nextButton = screen.getByRole('button', { name: 'Next' })
+    expect(nextButton).toBeDisabled()
+
+    await user.type(screen.getByLabelText('Primary contact name'), 'Rivaan')
+    await user.type(screen.getByLabelText('Primary contact email'), 'not-an-email')
+    expect(nextButton).toBeDisabled()
+    await user.clear(screen.getByLabelText('Primary contact email'))
+    await user.type(screen.getByLabelText('Primary contact email'), 'rivaan@simplifi.co.za')
+    expect(nextButton).toBeEnabled()
+
+    await user.click(nextButton)
+    expect(await screen.findByText('Step 2 of 14')).toBeInTheDocument()
+    const sectionAPatch = getPatchDraftStateCall(patchDraftState, 0)
+    expect(sectionAPatch.sectionKey).toBe('sectionA')
+    expect(sectionAPatch.stepData).toMatchObject({
+      primaryContactEmail: 'rivaan@simplifi.co.za',
+    })
+
+    const permanentMale = screen.getByLabelText('Permanent male')
+    const permanentFemale = screen.getByLabelText('Permanent female')
+    const permanentTotal = screen.getByLabelText('Permanent total')
+    const grandTotal = screen.getByLabelText('Grand total')
+    expect(permanentTotal).toHaveAttribute('readOnly')
+    expect(grandTotal).toHaveAttribute('readOnly')
+
+    await user.clear(permanentMale)
+    await user.type(permanentMale, '5')
+    await user.clear(permanentFemale)
+    await user.type(permanentFemale, '7')
+    expect(permanentTotal).toHaveValue(12)
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    const sectionBPatch = getPatchDraftStateCall(patchDraftState, 1)
+    expect(sectionBPatch.sectionKey).toBe('sectionB')
+    expect(sectionBPatch.stepData).toMatchObject({
+      totals: { permanent: 12, grandTotal: 12 },
+    })
+  })
+
   it('EEAWizard warns on dirty navigation and removes beforeunload listener on unmount', async () => {
     const user = userEvent.setup()
     const confirmNavigation = vi.fn(() => false)
+    const patchDraftState = createPatchDraftState()
     const addListenerSpy = vi.spyOn(globalThis, 'addEventListener')
     const removeListenerSpy = vi.spyOn(globalThis, 'removeEventListener')
 
-    const { unmount } = render(<EEAWizard confirmNavigation={confirmNavigation} />)
-    await fillEmployerDetails(user)
-    await user.click(screen.getByRole('button', { name: 'Save and continue' }))
-    expect(screen.getByLabelText('Review and submit')).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    await user.type(screen.getByLabelText('Trade name'), ' Updated')
+    const { unmount } = render(
+      <EEAWizard confirmNavigation={confirmNavigation} patchDraftState={patchDraftState} />,
+    )
+    await user.type(screen.getByLabelText('Primary contact name'), 'Rivaan')
     expect(screen.getByText('Unsaved changes')).toBeInTheDocument()
 
     const beforeUnloadEvent = new Event('beforeunload', { cancelable: true })
@@ -467,9 +654,9 @@ describe('EEA hooks and wizard', () => {
     globalThis.dispatchEvent(beforeUnloadEvent)
     expect(beforeUnloadEvent.defaultPrevented).toBe(true)
 
-    await user.click(screen.getByRole('button', { name: 'Review and submit' }))
+    await user.click(screen.getByRole('button', { name: 'Section B - Workforce totals' }))
     expect(confirmNavigation).toHaveBeenCalledWith(UNSAVED_CHANGES_WARNING)
-    expect(screen.getByLabelText('Trade name')).toBeInTheDocument()
+    expect(screen.getByLabelText('Primary contact name')).toBeInTheDocument()
 
     const beforeUnloadHandler = addListenerSpy.mock.calls.find(
       (call): boolean => call[0] === 'beforeunload',
@@ -482,18 +669,22 @@ describe('EEA hooks and wizard', () => {
   it('EEAWizard allows confirmed dirty navigation and completes from review', async () => {
     const user = userEvent.setup()
     const confirmNavigation = vi.fn(() => true)
-    const onComplete = vi.fn()
+    const onComplete = vi.fn((_values: Record<string, unknown>): void => {})
+    const patchDraftState = createPatchDraftState()
 
-    render(<EEAWizard confirmNavigation={confirmNavigation} onComplete={onComplete} />)
-    await user.click(screen.getByRole('button', { name: 'Employer details' }))
-    await fillEmployerDetails(user)
-    await user.click(screen.getByRole('button', { name: 'Save and continue' }))
-    await user.click(screen.getByRole('button', { name: 'Back' }))
-    await user.type(screen.getByLabelText('Trade name'), ' Updated')
+    render(
+      <EEAWizard
+        confirmNavigation={confirmNavigation}
+        onComplete={onComplete}
+        patchDraftState={patchDraftState}
+      />,
+    )
+    await user.type(screen.getByLabelText('Primary contact name'), 'Rivaan')
     await user.click(screen.getByRole('button', { name: 'Review and submit' }))
     await user.click(screen.getByRole('button', { name: 'Submit' }))
 
     expect(confirmNavigation).toHaveBeenCalledWith(UNSAVED_CHANGES_WARNING)
-    expect(onComplete).toHaveBeenCalledWith(expect.objectContaining({ tradeName: 'Simplifi SA' }))
+    const completedState = onComplete.mock.calls[0]?.[0]
+    expect(completedState?.['section-a']).toMatchObject({ primaryContactName: 'Rivaan' })
   })
 })

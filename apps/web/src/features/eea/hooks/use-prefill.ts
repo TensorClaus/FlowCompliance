@@ -9,11 +9,13 @@ import {
   type Result,
 } from '@simplifi/shared'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import type { SectionAReadOnlyFields } from '../wizard-types'
 
 export const PREFILL_ENDPOINT = '/api/eea2/prefill'
 
 export interface PrefillData {
   employerProfile: EmployerProfile | null
+  sectionAReadOnly: SectionAReadOnlyFields
   barrierCategories: BarrierRecord[]
 }
 
@@ -41,6 +43,12 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const defaultPrefillData: PrefillData = {
   employerProfile: null,
+  sectionAReadOnly: {
+    registrationNumber: '',
+    sector: '',
+    province: '',
+    totalEmployeesPriorYear: 0,
+  },
   barrierCategories: [],
 }
 
@@ -78,6 +86,42 @@ const toReportShape = (payload: unknown): Record<string, unknown> => {
   return payload
 }
 
+const toStringValue = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+const toNumberValue = (value: unknown): number =>
+  typeof value === 'number' && Number.isFinite(value) ? value : 0
+
+const readNestedString = (value: unknown, key: string): string =>
+  isRecord(value) ? toStringValue(value[key]) : ''
+
+const extractSectionAReadOnly = (
+  employerProfile: EmployerProfile | null,
+  rawEmployerProfile: unknown,
+): SectionAReadOnlyFields => {
+  if (isRecord(rawEmployerProfile)) {
+    return {
+      registrationNumber:
+        toStringValue(rawEmployerProfile['companyRegNumber']) ||
+        toStringValue(rawEmployerProfile['dtiRegistrationNumber']),
+      sector:
+        toStringValue(rawEmployerProfile['sectorCode']) ||
+        toStringValue(rawEmployerProfile['industrySector']),
+      province:
+        toStringValue(rawEmployerProfile['province']) ||
+        readNestedString(rawEmployerProfile['postalAddress'], 'province') ||
+        readNestedString(rawEmployerProfile['physicalAddress'], 'province'),
+      totalEmployeesPriorYear: toNumberValue(rawEmployerProfile['totalEmployees']),
+    }
+  }
+
+  return {
+    registrationNumber: employerProfile?.dtiRegistrationNumber ?? '',
+    sector: employerProfile?.industrySector ?? '',
+    province: employerProfile?.province ?? employerProfile?.postalAddress.province ?? '',
+    totalEmployeesPriorYear: 0,
+  }
+}
+
 const createPrefillRequestInit = (signal: AbortSignal): RequestInit => ({
   method: 'GET',
   headers: { accept: 'application/json' },
@@ -99,8 +143,10 @@ const fetchWithSignalRetry = async (url: string, requestInit: RequestInit): Prom
 export const extractPrefillData = (payload: unknown): PrefillData => {
   const report = toReportShape(payload)
 
-  const employerProfileParse = EmployerProfileSchema.safeParse(report['employerProfile'])
+  const rawEmployerProfile = report['employerProfile']
+  const employerProfileParse = EmployerProfileSchema.safeParse(rawEmployerProfile)
   const employerProfile = employerProfileParse.success ? employerProfileParse.data : null
+  const sectionAReadOnly = extractSectionAReadOnly(employerProfile, rawEmployerProfile)
 
   let barrierCandidates: unknown[] = []
   const sectionF = report['sectionF']
@@ -120,6 +166,7 @@ export const extractPrefillData = (payload: unknown): PrefillData => {
 
   return {
     employerProfile,
+    sectionAReadOnly,
     barrierCategories,
   }
 }
