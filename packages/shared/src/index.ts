@@ -83,6 +83,13 @@ export {
   type EEA1Form,
 } from './schemas/eea1.js'
 
+// EEA1 — Declaration form schema (personal details + nationality sections)
+export {
+  EEA1DeclarationBaseSchema,
+  EEA1DeclarationSchema,
+  type EEA1Declaration,
+} from './eea/eea1.schema.js'
+
 // EEA2 — Annual Report
 export type {
   DateRange,
@@ -239,6 +246,9 @@ export {
   getEapByProvince,
   getEapByProvinceAndLevel,
 } from './data/eap.js'
+
+// POPIA PII field path registry
+export { PII_FIELD_PATHS } from './eea/pii-fields.js'
 
 // Cross-form validation rules
 export {

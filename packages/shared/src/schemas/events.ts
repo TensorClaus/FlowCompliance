@@ -143,6 +143,16 @@ export const EEAEventTypeSchema = z.enum([
    * acknowledgement reference number when available.
    */
   'SUBMITTED',
+
+  /**
+   * EEA1_POPIA_CONSENT — emitted when an employee explicitly acknowledges the
+   * POPIA s.18 prescribed information notice before providing demographic data
+   * on the EEA1 workforce profile form. fieldPath is null (form-level event).
+   * newValue holds an ISO-8601 timestamp of the acknowledgement. previousValue
+   * is always null. Required for the audit trail under EEA s.21(4) and POPIA
+   * s.22 (operator accountability).
+   */
+  'EEA1_POPIA_CONSENT',
 ])
 
 export type EEAEventType = z.infer<typeof EEAEventTypeSchema>

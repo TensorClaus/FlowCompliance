@@ -9,7 +9,9 @@ import authPlugin from './plugins/auth.js'
 import logScrubberPlugin, { REDACT_CONFIG } from './plugins/log-scrubber.js'
 import tenantContextPlugin from './plugins/tenant-context.js'
 import { authRoutes } from './routes/auth.routes.js'
+import { eea1DeclarationsRoutes } from './routes/eea1/declarations.js'
 import { eea1Routes } from './routes/eea1.routes.js'
+import { eea2EventsRoutes } from './routes/eea2/events.js'
 import { eea2Routes } from './routes/eea2.routes.js'
 import { employerRoutes } from './routes/employer.routes.js'
 import { totpRoutes } from './routes/totp.routes.js'
@@ -21,6 +23,11 @@ export async function buildApp(): Promise<FastifyInstance> {
       redact: REDACT_CONFIG,
     },
   })
+
+  // POPIA s.19 — PII encryption is applied at the Prisma client level via the
+  // KMS encryption extension wired in apps/api/src/lib/prisma.ts. Every import
+  // of `prisma` in this process receives the encrypting client, so no
+  // create/update/upsert on Eea1Declaration can bypass field encryption.
 
   // Log scrubber MUST be registered before any route handlers (POPIA s.19).
   await app.register(logScrubberPlugin)
@@ -41,7 +48,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(totpRoutes)
   await app.register(employerRoutes)
   await app.register(eea1Routes)
+  await app.register(eea1DeclarationsRoutes)
   await app.register(eea2Routes)
+  await app.register(eea2EventsRoutes)
 
   // Tenant context — enforces JWT auth + sets RLS GUC for all non-public routes.
   // The plugin's onRequest hook skips /health; add further public paths there as needed.
