@@ -303,7 +303,7 @@ export const SectionFSchema = z.object({
    * Each barrier records whether it exists and whether an AA measure has been developed.
    * Array must contain exactly one entry per category (categoryId 1–23).
    */
-  barriers: z.array(BarrierRecordSchema),
+  barriers: z.array(BarrierRecordSchema).length(23),
 })
 
 export type SectionF = z.infer<typeof SectionFSchema>

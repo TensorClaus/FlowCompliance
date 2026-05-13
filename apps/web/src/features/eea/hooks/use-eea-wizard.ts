@@ -125,6 +125,14 @@ export function useEEAWizard({
         previous.disabilityFlagActive || patch.disabilityFlagActive === true
           ? true
           : (patch.disabilityFlagActive ?? previous.disabilityFlagActive),
+      barrierTerminationFlag:
+        previous.barrierTerminationFlag || patch.barrierTerminationFlag === true
+          ? true
+          : (patch.barrierTerminationFlag ?? previous.barrierTerminationFlag),
+      accommodationOverdueFlag:
+        previous.accommodationOverdueFlag || patch.accommodationOverdueFlag === true
+          ? true
+          : (patch.accommodationOverdueFlag ?? previous.accommodationOverdueFlag),
     }))
   }, [])
 

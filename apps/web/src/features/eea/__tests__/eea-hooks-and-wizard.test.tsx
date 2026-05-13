@@ -552,6 +552,34 @@ describe('EEA hooks and wizard', () => {
     })
   })
 
+  it('useEEAWizard latches compliance flags once active', () => {
+    const { result } = renderHook(() => useEEAWizard({ formId: 'form-123' }))
+
+    act(() => {
+      result.current.updateWizardContext({
+        barrierTerminationFlag: true,
+        accommodationOverdueFlag: true,
+      })
+    })
+
+    expect(result.current.wizardContext).toMatchObject({
+      barrierTerminationFlag: true,
+      accommodationOverdueFlag: true,
+    })
+
+    act(() => {
+      result.current.updateWizardContext({
+        barrierTerminationFlag: false,
+        accommodationOverdueFlag: false,
+      })
+    })
+
+    expect(result.current.wizardContext).toMatchObject({
+      barrierTerminationFlag: true,
+      accommodationOverdueFlag: true,
+    })
+  })
+
   it('useEEAWizard gates advance on schema validity and stores Section B totals', async () => {
     const patchDraftState = createPatchDraftState()
     const { result } = renderHook(() =>

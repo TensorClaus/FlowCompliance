@@ -5,8 +5,32 @@ import { PercentageSliders } from './components/PercentageSliders'
 import { EmployerDetailsForm } from './components/employer-details-form'
 import { DisabilityFlagBanner } from './components/occupational-matrix/DisabilityFlagBanner'
 import { OccupationalMatrix as OccupationalMatrixComponent } from './components/occupational-matrix/OccupationalMatrix'
+import {
+  SECTION_E_PROMOTIONS_SCHEMA,
+  SectionEPromotionsStep,
+} from './components/sections/SectionEPromotions'
+import {
+  SECTION_F_TERMINATIONS_SCHEMA,
+  SectionFTerminationsStep,
+} from './components/sections/SectionFTerminations'
+import {
+  SECTION_G_SKILLS_SCHEMA,
+  SectionGSkillsDevStep,
+} from './components/sections/SectionGSkillsDev'
+import {
+  SECTION_H1_ACCOMMODATION_SCHEMA,
+  SectionH1AccommodationStep,
+} from './components/sections/SectionH1Accommodation'
+import {
+  SECTION_H2_ACCESSIBILITY_SCHEMA,
+  SectionH2AccessibilityStep,
+} from './components/sections/SectionH2Accessibility'
 import { usePrefill } from './hooks/use-prefill'
 import { useWizardFormController } from './wizard-form-context'
+import {
+  createEmptyOccupationalMatrix as createEmptyOccupationalMatrixHelper,
+  getOccupationalMatrix as getOccupationalMatrixHelper,
+} from './wizard-step-registry-helpers'
 import type {
   SectionAData,
   SectionAReadOnlyFields,
@@ -82,41 +106,8 @@ export const emptySectionBData: SectionBData = {
   contract: { male: 0, female: 0 },
 }
 
-const emptyMatrixCell = { value: 0 }
-
-const createEmptyMatrixRow = (): OccupationalMatrix['topManagement'] => ({
-  africanMale: emptyMatrixCell,
-  africanFemale: emptyMatrixCell,
-  colouredMale: emptyMatrixCell,
-  colouredFemale: emptyMatrixCell,
-  indianMale: emptyMatrixCell,
-  indianFemale: emptyMatrixCell,
-  whiteMale: emptyMatrixCell,
-  whiteFemale: emptyMatrixCell,
-  foreignNationalMale: emptyMatrixCell,
-  foreignNationalFemale: emptyMatrixCell,
-  total: emptyMatrixCell,
-})
-
-export const createEmptyOccupationalMatrix = (): OccupationalMatrix => ({
-  topManagement: createEmptyMatrixRow(),
-  seniorManagement: createEmptyMatrixRow(),
-  professionallyQualified: createEmptyMatrixRow(),
-  skilledTechnical: createEmptyMatrixRow(),
-  semiSkilled: createEmptyMatrixRow(),
-  unskilled: createEmptyMatrixRow(),
-  temporaryEmployees: createEmptyMatrixRow(),
-  totalPermanent: createEmptyMatrixRow(),
-  grandTotal: createEmptyMatrixRow(),
-})
-
-export const getOccupationalMatrix = (value: unknown): OccupationalMatrix => {
-  const parsed = OccupationalMatrixSchema.safeParse(value)
-  return parsed.success ? parsed.data : createEmptyOccupationalMatrix()
-}
-
-export const getOccupationalMatrixTotal = (value: unknown): number =>
-  getOccupationalMatrix(value).grandTotal.total.value
+export const createEmptyOccupationalMatrix = createEmptyOccupationalMatrixHelper
+export const getOccupationalMatrix = getOccupationalMatrixHelper
 
 const getNestedValue = (value: unknown, path: string[]): unknown => {
   let current = value
@@ -711,9 +702,9 @@ export const STEP_REGISTRY: StepRegistry = {
     requiresHITL: false,
   },
   'section-e-sector-targets': {
-    sectionKey: 'sectionE.sectorTargets5Year',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+    sectionKey: 'sectionE.promotions',
+    component: SectionEPromotionsStep,
+    validationSchema: SECTION_E_PROMOTIONS_SCHEMA,
     requiresHITL: false,
   },
   'section-e-next-year-targets': {
@@ -723,9 +714,9 @@ export const STEP_REGISTRY: StepRegistry = {
     requiresHITL: false,
   },
   'section-f-consultation': {
-    sectionKey: 'sectionF.consultation',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+    sectionKey: 'sectionF.terminations',
+    component: SectionFTerminationsStep,
+    validationSchema: SECTION_F_TERMINATIONS_SCHEMA,
     requiresHITL: false,
   },
   'section-f-barriers': {
@@ -735,21 +726,21 @@ export const STEP_REGISTRY: StepRegistry = {
     requiresHITL: false,
   },
   'section-g-monitoring': {
-    sectionKey: 'sectionG',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+    sectionKey: 'sectionG.skillsDevelopment',
+    component: SectionGSkillsDevStep,
+    validationSchema: SECTION_G_SKILLS_SCHEMA,
     requiresHITL: false,
   },
   'section-h-declaration': {
-    sectionKey: 'sectionH.declaration',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+    sectionKey: 'sectionH.accommodationRequests',
+    component: SectionH1AccommodationStep,
+    validationSchema: SECTION_H1_ACCOMMODATION_SCHEMA,
     requiresHITL: true,
   },
   'section-h-hitl': {
-    sectionKey: 'sectionH.hitl',
-    component: PlaceholderStep,
-    validationSchema: placeholderSchema,
+    sectionKey: 'sectionH.accessibilityAssessment',
+    component: SectionH2AccessibilityStep,
+    validationSchema: SECTION_H2_ACCESSIBILITY_SCHEMA,
     requiresHITL: true,
   },
   review: {
@@ -761,3 +752,5 @@ export const STEP_REGISTRY: StepRegistry = {
 }
 
 export const STEP_IDS = Object.keys(STEP_REGISTRY)
+
+export { getOccupationalMatrixTotal } from './wizard-step-registry-helpers'
