@@ -5,7 +5,13 @@ import { config } from '../config.js'
 import { prisma } from '../lib/prisma.js'
 
 const JWT_ALGORITHM = 'HS256' as const
-const PUBLIC_PREFIXES = ['/auth/register', '/auth/login', '/auth/refresh', '/auth/totp/verify']
+const PUBLIC_PREFIXES = [
+  '/auth/register',
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/totp/verify',
+  '/test/seed', // test-only seed endpoint; never registered outside NODE_ENV=test
+]
 const PUBLIC_EXACT = new Set(['/health'])
 
 interface JwtPayload {

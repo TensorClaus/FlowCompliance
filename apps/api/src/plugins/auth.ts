@@ -11,7 +11,13 @@ const SIGNING_ROLES = new Set(['CEO', 'CFO', 'SENIOR_MANAGER'])
 
 // ─── Routes that bypass this auth guard ──────────────────────────────────────
 
-const PUBLIC_PREFIXES = ['/auth/register', '/auth/login', '/auth/refresh', '/auth/totp/verify']
+const PUBLIC_PREFIXES = [
+  '/auth/register',
+  '/auth/login',
+  '/auth/refresh',
+  '/auth/totp/verify',
+  '/test/seed', // test-only seed endpoint; never registered outside NODE_ENV=test
+]
 const PUBLIC_EXACT = new Set(['/health'])
 
 function isPublicRoute(url: string): boolean {

@@ -9,4 +9,20 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/eea1': {
+        target: process.env['VITE_API_TARGET'] ?? 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/api': {
+        target: process.env['VITE_API_TARGET'] ?? 'http://localhost:3001',
+        changeOrigin: true,
+      },
+      '/test': {
+        target: process.env['VITE_API_TARGET'] ?? 'http://localhost:3001',
+        changeOrigin: true,
+      },
+    },
+  },
 })

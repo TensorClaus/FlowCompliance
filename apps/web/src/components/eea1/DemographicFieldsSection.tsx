@@ -22,13 +22,36 @@
 // path, never field values.
 
 import { EEA1DeclarationBaseSchema } from '@simplifi/shared'
-import { useState, useCallback, useMemo, type ReactElement, type ChangeEvent } from 'react'
+import {
+  useState,
+  useCallback,
+  useEffect,
+  useMemo,
+  type ReactElement,
+  type ChangeEvent,
+} from 'react'
 import { useEEAAutosave } from '@/hooks/use-eea-autosave'
 import { cn } from '@/lib/utils'
+
+/** PII values surfaced to a parent page via the optional onValuesChange callback. */
+export interface PIIValues {
+  race: Race
+  gender: Gender
+  disability: Disability
+  disabilityNature: string
+  reasonableAccommodation: boolean
+}
 
 export interface DemographicFieldsSectionProps {
   /** EEA form instance identifier — passed through to useEEAAutosave. */
   formId: string
+  /**
+   * Optional callback invoked whenever a PII field value changes.
+   * Used by the /eea1/new page to collect PII for the final POST body
+   * without violating the component's internal-state-only PII contract.
+   * Values are never autosaved; they travel to the server only via submit.
+   */
+  onValuesChange?: (values: PIIValues) => void
 }
 
 type Race = 'African' | 'Coloured' | 'Indian or Asian' | 'White' | null
@@ -71,12 +94,21 @@ const TEXTAREA = cn(
 
 const DISABILITY_NATURE_MAX_LENGTH = 200
 
-export function DemographicFieldsSection({ formId }: DemographicFieldsSectionProps): ReactElement {
+export function DemographicFieldsSection({
+  formId,
+  onValuesChange,
+}: DemographicFieldsSectionProps): ReactElement {
   const [race, setRace] = useState<Race>(null)
   const [gender, setGender] = useState<Gender>(null)
   const [disability, setDisability] = useState<Disability>(null)
   const [disabilityNature, setDisabilityNature] = useState('')
   const [reasonableAccommodation, setReasonableAccommodation] = useState(false)
+
+  // Notify parent of PII value changes for the consent-gated submit path.
+  // onValuesChange is optional: absent in unit tests and standalone use.
+  useEffect(() => {
+    onValuesChange?.({ race, gender, disability, disabilityNature, reasonableAccommodation })
+  }, [race, gender, disability, disabilityNature, reasonableAccommodation, onValuesChange])
 
   // PII fields are excluded from the autosave PATCH path. They are persisted
   // only via the explicit consent-gated submit endpoint.

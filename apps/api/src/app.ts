@@ -14,6 +14,7 @@ import { eea1Routes } from './routes/eea1.routes.js'
 import { eea2EventsRoutes } from './routes/eea2/events.js'
 import { eea2Routes } from './routes/eea2.routes.js'
 import { employerRoutes } from './routes/employer.routes.js'
+import { eventStoreRoutes } from './routes/event-store.routes.js'
 import { totpRoutes } from './routes/totp.routes.js'
 
 export async function buildApp(): Promise<FastifyInstance> {
@@ -51,6 +52,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(eea1DeclarationsRoutes)
   await app.register(eea2Routes)
   await app.register(eea2EventsRoutes)
+  await app.register(eventStoreRoutes)
 
   // Tenant context — enforces JWT auth + sets RLS GUC for all non-public routes.
   // The plugin's onRequest hook skips /health; add further public paths there as needed.
@@ -60,6 +62,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   // and enforce TOTP for signing-role users. Depends on tenant-context being
   // registered first so the fastify-plugin dependency declaration is satisfied.
   await app.register(authPlugin)
+
+  // Test-only seed routes: create/teardown isolated tenant data for Playwright
+  // E2E suites. Never registered in production or staging environments.
+  if (config.NODE_ENV === 'test') {
+    const { testSeedRoutes } = await import('./routes/test-seed.routes.js')
+    await app.register(testSeedRoutes)
+  }
 
   return app
 }
