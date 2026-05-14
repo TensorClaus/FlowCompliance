@@ -158,8 +158,9 @@ export function SectionEPromotionsStep({ isLocked = false }: StepProps) {
       >
         <OccupationalMatrixComponent
           data={data.matrix}
+          disabled={data.noPromotions}
           isDesignatedEmployer={false}
-          mode={data.noPromotions ? 'locked' : 'edit'}
+          mode="edit"
           onChange={(updated): void => {
             update({ matrix: updated })
           }}

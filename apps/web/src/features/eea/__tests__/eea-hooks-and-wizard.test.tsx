@@ -29,7 +29,9 @@ import {
   usePrefill,
   type PatchDraftStateInput,
   type UseEEAAutosaveOptions,
+  type WizardContext,
 } from '..'
+import { WizardFormContext } from '../wizard-form-context'
 import { server } from '@/test/server'
 
 const buildEvent = (value: string): EEAEvent => ({
@@ -117,6 +119,51 @@ const getPatchDraftStateCall = (
     throw new Error(`Expected patchDraftState call ${String(index)} to exist`)
   }
   return call
+}
+
+const defaultWizardContext: WizardContext = {
+  disabilityFlagActive: false,
+  barrierTerminationFlag: false,
+  accommodationOverdueFlag: false,
+  sectionBTotals: null,
+}
+
+const renderRegistryStep = (
+  stepId: string,
+  options: {
+    completedSteps?: Set<string>
+    formState?: Record<string, unknown>
+    isLocked?: boolean
+    setStepData?: (stepId: string, updater: object | ((previous: unknown) => unknown)) => void
+    wizardContext?: typeof defaultWizardContext
+  } = {},
+) => {
+  const Step = STEP_REGISTRY[stepId]?.component
+  if (Step === undefined) {
+    throw new Error(`Missing registry step ${stepId}`)
+  }
+
+  return render(
+    <WizardFormContext.Provider
+      value={{
+        tenantId: '',
+        reportingYear: 2026,
+        prefillOptions: { autoLoad: false },
+        formState: options.formState ?? {},
+        setStepData: options.setStepData ?? vi.fn(),
+      }}
+    >
+      <Step
+        completedSteps={options.completedSteps ?? new Set()}
+        formId="form-123"
+        goToStep={vi.fn()}
+        onAdvance={vi.fn()}
+        updateWizardContext={vi.fn()}
+        wizardContext={options.wizardContext ?? defaultWizardContext}
+        {...(options.isLocked === undefined ? {} : { isLocked: options.isLocked })}
+      />
+    </WizardFormContext.Provider>,
+  )
 }
 
 describe('EEA hooks and wizard', () => {
@@ -541,6 +588,119 @@ describe('EEA hooks and wizard', () => {
     expect(STEP_REGISTRY['review']?.sectionKey).toBe('review')
   })
 
+  it('registry components cover locked read-only, placeholders, D1 edits, and review submit paths', async () => {
+    const user = userEvent.setup()
+    const setStepData = vi.fn()
+
+    const sectionAView = renderRegistryStep('section-a', {
+      formState: {
+        'section-a': {
+          registrationNumber: 'REG-LOCKED',
+          sector: 'Technology',
+          province: 'gauteng',
+          totalEmployeesPriorYear: 100,
+          primaryContactName: 'Rivaan',
+          primaryContactEmail: 'rivaan@simplifi.co.za',
+          reportingYear: 2026,
+        },
+      },
+      isLocked: true,
+    })
+    expect(screen.getByText('REG-LOCKED')).toBeInTheDocument()
+    sectionAView.unmount()
+
+    const sectionBView = renderRegistryStep('section-b', {
+      formState: {
+        'section-b': {
+          permanent: { male: 1, female: 2 },
+          nonPermanent: { male: 3, female: 4 },
+          contract: { male: 5, female: 6 },
+        },
+      },
+      isLocked: true,
+    })
+    expect(screen.getByText('Grand total')).toBeInTheDocument()
+    expect(screen.getByText('21')).toBeInTheDocument()
+    sectionBView.unmount()
+
+    const sectionD1View = renderRegistryStep('section-d1', {
+      formState: { 'section-d1': zeroOccupationalMatrix() },
+      setStepData,
+    })
+    fireEvent.change(screen.getAllByRole('spinbutton')[0] as HTMLElement, {
+      target: { value: '3' },
+    })
+    expect(setStepData).toHaveBeenCalledWith('section-d1', expect.any(Object))
+    sectionD1View.unmount()
+
+    const placeholderView = renderRegistryStep('section-e-next-year-targets')
+    expect(
+      screen.getByText('This section will be completed in the next EEA2 tasks.'),
+    ).toBeInTheDocument()
+    placeholderView.unmount()
+
+    const allCompletedSteps = new Set(
+      Object.keys(STEP_REGISTRY).filter((stepId) => stepId !== 'review'),
+    )
+    const reviewState = {
+      'section-a': {
+        registrationNumber: 'REG-REVIEW',
+        primaryContactName: 'Rivaan',
+        primaryContactEmail: 'rivaan@simplifi.co.za',
+        reportingYear: 2026,
+      },
+      'section-b': { permanent: 1, complete: true },
+      'section-c1': null,
+      'section-c2': 4,
+      'section-d1': {},
+      'section-d2': false,
+    }
+
+    const lockedReview = renderRegistryStep('review', {
+      completedSteps: allCompletedSteps,
+      formState: reviewState,
+      isLocked: true,
+      wizardContext: {
+        ...defaultWizardContext,
+        barrierTerminationFlag: true,
+        accommodationOverdueFlag: true,
+      },
+    })
+    expect(screen.getByTestId('barrier-termination-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('accommodation-overdue-banner')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Submit for CEO signing' })).not.toBeInTheDocument()
+    lockedReview.unmount()
+
+    const statusBodies: Array<Record<string, unknown>> = []
+    server.use(
+      http.patch('*/api/eea2/:formId/status', async ({ request }: { request: Request }) => {
+        statusBodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json({ status: 'pending_ceo' })
+      }),
+    )
+    const successfulReview = renderRegistryStep('review', {
+      completedSteps: allCompletedSteps,
+      formState: reviewState,
+    })
+    await user.click(screen.getByRole('button', { name: 'Submit for CEO signing' }))
+    await waitFor(() => {
+      expect(statusBodies).toEqual([{ status: 'pending_ceo' }])
+    })
+    successfulReview.unmount()
+
+    server.use(
+      http.patch('*/api/eea2/:formId/status', () =>
+        HttpResponse.json({ error: 'Unable to queue signing' }, { status: 409 }),
+      ),
+    )
+    renderRegistryStep('review', {
+      completedSteps: allCompletedSteps,
+      formState: reviewState,
+    })
+    await user.click(screen.getByRole('button', { name: 'Submit for CEO signing' }))
+    expect(await screen.findByText('Unable to queue signing')).toBeInTheDocument()
+  })
+
   it('useEEAWizard exposes updateWizardContext and merges patches', () => {
     const { result } = renderHook(() => useEEAWizard({ formId: 'form-123' }))
 
@@ -559,24 +719,28 @@ describe('EEA hooks and wizard', () => {
 
     act(() => {
       result.current.updateWizardContext({
+        disabilityFlagActive: true,
         barrierTerminationFlag: true,
         accommodationOverdueFlag: true,
       })
     })
 
     expect(result.current.wizardContext).toMatchObject({
+      disabilityFlagActive: true,
       barrierTerminationFlag: true,
       accommodationOverdueFlag: true,
     })
 
     act(() => {
       result.current.updateWizardContext({
+        disabilityFlagActive: false,
         barrierTerminationFlag: false,
         accommodationOverdueFlag: false,
       })
     })
 
     expect(result.current.wizardContext).toMatchObject({
+      disabilityFlagActive: true,
       barrierTerminationFlag: true,
       accommodationOverdueFlag: true,
     })
@@ -869,7 +1033,12 @@ describe('EEA hooks and wizard', () => {
     expect(screen.getByText('Percentages must sum to 100%')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
 
-    fireEvent.change(screen.getByLabelText('African: 0%'), { target: { value: '100' } })
+    fireEvent.change(screen.getByLabelText('African: 0%'), { target: { value: '99' } })
+    expect(screen.getByText('Total: 99%')).toHaveClass('text-red-700')
+    expect(screen.getByText('Percentages must sum to 100%')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled()
+
+    fireEvent.change(screen.getByLabelText('African: 99%'), { target: { value: '100' } })
     await user.type(screen.getByLabelText('Total training budget (ZAR)'), '50000')
     await user.type(screen.getByLabelText('Training spend narrative'), 'Focused scarce-skills plan')
 
@@ -884,6 +1053,139 @@ describe('EEA hooks and wizard', () => {
       percentages: [100, 0, 0, 0, 0],
       totalBudget: 50_000,
     })
+  })
+
+  it('Section E disables every promotion matrix input when no promotions is checked', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Section E - Sector targets' }))
+    const checkbox = screen.getByLabelText('No promotions in reporting period')
+    await user.click(checkbox)
+
+    expect(checkbox).toBeChecked()
+    expect(screen.getByLabelText('Promotion from level')).toBeDisabled()
+    expect(screen.getByLabelText('Promotion to level')).toBeDisabled()
+    const matrixInputs = screen.getAllByRole('spinbutton')
+    expect(matrixInputs.length).toBeGreaterThan(0)
+    for (const input of matrixInputs) {
+      expect(input).toBeDisabled()
+    }
+  })
+
+  it('Section F writes and latches the barrier termination flag event', async () => {
+    const user = userEvent.setup()
+    const eventBodies: Array<Record<string, unknown>> = []
+
+    server.use(
+      http.post('*/api/event-store/append', async ({ request }: { request: Request }) => {
+        eventBodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json({ success: true })
+      }),
+    )
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Section F - Consultation' }))
+    await user.selectOptions(
+      screen.getByLabelText('Top management termination reason'),
+      'dismissal_misconduct',
+    )
+    const firstMatrixInput = screen.getAllByRole('spinbutton')[0]
+    fireEvent.change(firstMatrixInput as HTMLElement, { target: { value: '20' } })
+
+    await waitFor(() => {
+      expect(eventBodies).toHaveLength(1)
+    })
+    expect(eventBodies[0]).toMatchObject({ eventType: 'BARRIER_TERMINATION_FLAG' })
+    expect(screen.getByTestId('barrier-termination-banner')).toBeInTheDocument()
+
+    fireEvent.change(firstMatrixInput as HTMLElement, { target: { value: '0' } })
+    expect(screen.getByTestId('barrier-termination-banner')).toBeInTheDocument()
+    expect(eventBodies).toHaveLength(1)
+  })
+
+  it('Section G shows the WSP warning without blocking advance', async () => {
+    const user = userEvent.setup()
+    const patchDraftState = createPatchDraftState()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        initialFormState={{
+          'section-g-monitoring': {
+            matrix: zeroOccupationalMatrix(),
+            wspSubmitted: true,
+            narrative: '',
+          },
+        }}
+        patchDraftState={patchDraftState}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Section G - Monitoring' }))
+    expect(screen.queryByTestId('wsp-warning-banner')).not.toBeInTheDocument()
+    await user.click(screen.getByLabelText('WSP submitted to the SETA'))
+    expect(screen.getByTestId('wsp-warning-banner')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled()
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+
+    expect(await screen.findByText('Step 12 of 14')).toBeInTheDocument()
+    expect(getPatchDraftStateCall(patchDraftState, 0)).toMatchObject({
+      stepId: 'section-g-monitoring',
+      sectionKey: 'sectionG.skillsDevelopment',
+    })
+  })
+
+  it('Section H records overdue accommodation requests and exposes a non-dismissible banner', async () => {
+    const user = userEvent.setup()
+    const eventBodies: Array<Record<string, unknown>> = []
+    const overdueDate = new Date(Date.now() - 22 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+
+    server.use(
+      http.post('*/api/event-store/append', async ({ request }: { request: Request }) => {
+        eventBodies.push((await request.json()) as Record<string, unknown>)
+        return HttpResponse.json({ success: true })
+      }),
+    )
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Section H - Declaration' }))
+    fireEvent.change(screen.getByLabelText('Physical status'), { target: { value: 'Pending' } })
+    fireEvent.change(screen.getByLabelText('Physical created at'), {
+      target: { value: overdueDate },
+    })
+    fireEvent.change(screen.getByLabelText('Physical count'), { target: { value: '1' } })
+
+    await waitFor(() => {
+      expect(eventBodies).toHaveLength(1)
+    })
+    expect(eventBodies[0]).toMatchObject({ eventType: 'ACCOMMODATION_OVERDUE_FLAG' })
+    const banner = screen.getByTestId('accommodation-overdue-banner')
+    expect(banner).toBeInTheDocument()
+    expect(banner.querySelector('[data-dismiss]')).toBeNull()
   })
 
   it('EEAWizard warns on dirty navigation and removes beforeunload listener on unmount', async () => {
@@ -967,6 +1269,44 @@ describe('EEA hooks and wizard', () => {
     expect(document.querySelector('[data-close]')).toBeNull()
   })
 
+  it('Review disables submit when the wizard still has incomplete steps', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Review and submit' }))
+
+    expect(screen.getByRole('button', { name: 'Submit for CEO signing' })).toBeDisabled()
+  })
+
+  it('keeps blank submissions guarded with zero completed steps', async () => {
+    const user = userEvent.setup()
+    const onComplete = vi.fn()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        onComplete={onComplete}
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Review and submit' }))
+
+    const reviewSubmitButton = screen.getByRole('button', { name: 'Submit for CEO signing' })
+    expect(reviewSubmitButton).toBeDisabled()
+    await user.click(reviewSubmitButton)
+    expect(reviewSubmitButton).toBeDisabled()
+    expect(onComplete).not.toHaveBeenCalled()
+  })
+
   it('Signing ceremony uses the shared declaration text and gates submission on all fields', async () => {
     const user = userEvent.setup()
     const signRequest = vi.fn(() => Promise.resolve({ status: 'signed' as const }))
@@ -981,7 +1321,9 @@ describe('EEA hooks and wizard', () => {
     )
 
     const signButton = screen.getByRole('button', { name: 'Confirm and Sign' })
-    expect(screen.getByLabelText(EEA2_DECLARATION_TEXT)).toBeInTheDocument()
+    const declarationCheckbox = screen.getByLabelText(EEA2_DECLARATION_TEXT)
+    expect(declarationCheckbox).toBeInTheDocument()
+    expect(declarationCheckbox.closest('label')?.textContent).toContain(EEA2_DECLARATION_TEXT)
     expect(signButton).toBeDisabled()
 
     await user.type(screen.getByLabelText('TOTP code'), '123456')
@@ -989,7 +1331,7 @@ describe('EEA hooks and wizard', () => {
       screen.getByPlaceholderText('Type your full registered name exactly'),
       'Rivaan Pillay',
     )
-    await user.click(screen.getByLabelText(EEA2_DECLARATION_TEXT))
+    await user.click(declarationCheckbox)
 
     expect(signButton).toBeEnabled()
     await user.click(signButton)

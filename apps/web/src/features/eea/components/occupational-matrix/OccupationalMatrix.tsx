@@ -106,6 +106,7 @@ export interface OccupationalMatrixProps {
   mode: 'view' | 'edit' | 'validate' | 'locked'
   data: OccupationalMatrixData
   isDesignatedEmployer: boolean
+  disabled?: boolean
   disabilityHeadcount?: number
   onChange?: (updated: OccupationalMatrixData) => void
   onValidationError?: (
@@ -144,6 +145,7 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
       mode,
       data,
       isDesignatedEmployer,
+      disabled = false,
       disabilityHeadcount = 0,
       onChange,
       onValidationError,
@@ -306,11 +308,12 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
     )
 
     const isEditInteractive = mode === 'edit' || mode === 'validate'
+    const isDisabled = disabled || mode === 'locked'
 
     return (
       <div
-        aria-disabled={mode === 'locked' ? 'true' : undefined}
-        className={clsx('overflow-x-auto', mode === 'locked' && 'pointer-events-none opacity-75')}
+        aria-disabled={isDisabled ? 'true' : undefined}
+        className={clsx('overflow-x-auto', isDisabled && 'pointer-events-none opacity-75')}
         data-testid="occupational-matrix"
       >
         {disabilityFlagActive && (
@@ -357,7 +360,7 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
                   {EEA2_COLUMN_ORDER.map((colKey) => {
                     const isTotal = colKey === 'total'
                     const showInput = isEditInteractive && !isCalculated && !isTotal
-                    const cell = data[rowKey][colKey as keyof MatrixRow]
+                    const cell = data[rowKey][colKey]
                     const cellPath = `${rowKey}.${colKey}`
                     const cellErrors = errorsByCellPath.get(cellPath) ?? []
                     const hasError = cellErrors.some((e) => e.severity === 'error')
@@ -387,13 +390,14 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
                                   ? 'border-amber-400 bg-amber-50'
                                   : 'border-slate-300',
                             )}
+                            disabled={disabled}
                             min={0}
                             onBlur={() => {
                               handleCellBlur(rowKey, colKey)
                             }}
                             onChange={(e) => {
                               handleCellChange(
-                                rowKey as keyof OccupationalMatrixData,
+                                rowKey,
                                 colKey as keyof MatrixRow,
                                 e.target.valueAsNumber,
                               )

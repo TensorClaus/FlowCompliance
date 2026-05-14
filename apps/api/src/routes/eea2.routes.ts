@@ -72,17 +72,23 @@ function getUserId(requestUser: { sub: string; userId?: unknown }): string {
 
 export function eea2Routes(app: FastifyInstance): void {
   app.get('/eea2', async (request, reply) => {
-    const drafts = await prisma.eea2Draft.findMany({
-      where: { tenantId: request.user.tenantId },
-      orderBy: { updatedAt: 'desc' },
+    const drafts = await prisma.$transaction(async (tx) => {
+      await setTenantContext(tx, request.user.tenantId)
+      return tx.eea2Draft.findMany({
+        where: { tenantId: request.user.tenantId },
+        orderBy: { updatedAt: 'desc' },
+      })
     })
 
     return reply.status(200).send({ drafts })
   })
 
   app.get<{ Params: { id: string } }>('/eea2/:id', async (request, reply) => {
-    const draft = await prisma.eea2Draft.findFirst({
-      where: { id: request.params.id, tenantId: request.user.tenantId },
+    const draft = await prisma.$transaction(async (tx) => {
+      await setTenantContext(tx, request.user.tenantId)
+      return tx.eea2Draft.findFirst({
+        where: { id: request.params.id, tenantId: request.user.tenantId },
+      })
     })
 
     if (draft === null) {
@@ -105,12 +111,15 @@ export function eea2Routes(app: FastifyInstance): void {
       return reply.status(400).send({ error: 'Invalid request body' })
     }
 
-    const draft = await prisma.eea2Draft.create({
-      data: {
-        tenantId: request.user.tenantId,
-        reportingYear: body.data.reportingYear,
-        state: body.data.state as Prisma.InputJsonValue,
-      },
+    const draft = await prisma.$transaction(async (tx) => {
+      await setTenantContext(tx, request.user.tenantId)
+      return tx.eea2Draft.create({
+        data: {
+          tenantId: request.user.tenantId,
+          reportingYear: body.data.reportingYear,
+          state: body.data.state as Prisma.InputJsonValue,
+        },
+      })
     })
 
     return reply.status(201).send(draft)

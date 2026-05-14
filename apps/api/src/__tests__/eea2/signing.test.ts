@@ -123,6 +123,231 @@ async function postSign(
   })
 }
 
+function jsonHeaders(tenantId: string, userId: string, role: TestRole = 'EE_MANAGER') {
+  return {
+    authorization: `Bearer ${issueJwt(tenantId, userId, role)}`,
+    'content-type': 'application/json',
+  }
+}
+
+interface DraftResponse {
+  id: string
+  status: string
+}
+
+interface DraftListResponse {
+  drafts: DraftResponse[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
+function assertDraftResponse(value: unknown): asserts value is DraftResponse {
+  if (!isRecord(value) || typeof value.id !== 'string' || typeof value.status !== 'string') {
+    throw new Error('Expected draft response body')
+  }
+}
+
+function assertDraftListResponse(value: unknown): asserts value is DraftListResponse {
+  if (!isRecord(value) || !Array.isArray(value.drafts)) {
+    throw new Error('Expected draft list response body')
+  }
+  for (const draft of value.drafts) {
+    assertDraftResponse(draft)
+  }
+}
+
+describe('EEA2 draft routes', () => {
+  it('supports draft create, read, status, state patch, and PUT lifecycle mutations', async () => {
+    const tenantId = await createTestTenant('EEA2 draft lifecycle')
+    const userId = await seedUser(tenantId, { role: 'EE_MANAGER' })
+    const headers = jsonHeaders(tenantId, userId)
+
+    const invalidCreate = await app.inject({
+      method: 'POST',
+      url: '/eea2',
+      headers,
+      body: JSON.stringify({ reportingYear: 1999 }),
+    })
+    expect(invalidCreate.statusCode).toBe(400)
+
+    const createResponse = await app.inject({
+      method: 'POST',
+      url: '/eea2',
+      headers,
+      body: JSON.stringify({ reportingYear: 2027, state: { sectionA: { complete: true } } }),
+    })
+    expect(createResponse.statusCode).toBe(201)
+    const created: unknown = createResponse.json()
+    assertDraftResponse(created)
+    expect(created.status).toBe('draft')
+
+    const listResponse = await app.inject({ method: 'GET', url: '/eea2', headers })
+    expect(listResponse.statusCode).toBe(200)
+    const listBody: unknown = listResponse.json()
+    assertDraftListResponse(listBody)
+    expect(listBody.drafts).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: created.id })]),
+    )
+
+    const readResponse = await app.inject({ method: 'GET', url: `/eea2/${created.id}`, headers })
+    expect(readResponse.statusCode).toBe(200)
+    expect(readResponse.json()).toMatchObject({ id: created.id, status: 'draft' })
+
+    const missingRead = await app.inject({
+      method: 'GET',
+      url: `/eea2/${randomUUID()}`,
+      headers,
+    })
+    expect(missingRead.statusCode).toBe(404)
+
+    const statePatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${created.id}/draft/state`,
+      headers,
+      body: JSON.stringify({
+        stepId: 'section-b',
+        sectionKey: 'sectionB',
+        state: { sectionB: { total: 12 } },
+        completedSteps: ['section-a', 'section-b'],
+      }),
+    })
+    expect(statePatch.statusCode).toBe(200)
+    expect(statePatch.json()).toEqual({ status: 'draft' })
+
+    const statusPatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${created.id}/status`,
+      headers,
+      body: JSON.stringify({ status: 'pending_ceo' }),
+    })
+    expect(statusPatch.statusCode).toBe(200)
+    expect(statusPatch.json()).toEqual({ status: 'pending_ceo' })
+
+    const genericPatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${created.id}`,
+      headers,
+      body: JSON.stringify({ status: 'draft', state: { sectionC: { complete: true } } }),
+    })
+    expect(genericPatch.statusCode).toBe(200)
+    expect(genericPatch.json()).toEqual({ status: 'draft' })
+
+    const putResponse = await app.inject({
+      method: 'PUT',
+      url: `/eea2/${created.id}`,
+      headers,
+      body: JSON.stringify({ state: { sectionD: { complete: true } } }),
+    })
+    expect(putResponse.statusCode).toBe(200)
+    expect(putResponse.json()).toEqual({ status: 'draft' })
+
+    const draft = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      return tx.eea2Draft.findUnique({ where: { id: created.id } })
+    })
+    expect(draft?.state).toMatchObject({
+      sectionA: { complete: true },
+      sectionB: { total: 12 },
+      sectionC: { complete: true },
+      sectionD: { complete: true },
+      completedSteps: ['section-a', 'section-b'],
+    })
+  })
+
+  it('returns route-specific errors for missing, invalid, and immutable draft mutations', async () => {
+    const tenantId = await createTestTenant('EEA2 draft route errors')
+    const userId = await seedUser(tenantId, { role: 'EE_MANAGER' })
+    const headers = jsonHeaders(tenantId, userId)
+    const draftId = await seedDraft(tenantId, 'draft')
+    const signedTenantId = await createTestTenant('EEA2 signed route errors')
+    const signedDraftId = await seedDraft(signedTenantId, 'signed')
+    const signedUserId = await seedUser(signedTenantId, { role: 'EE_MANAGER' })
+    const signedHeaders = jsonHeaders(signedTenantId, signedUserId)
+
+    const invalidStatePatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${draftId}/draft/state`,
+      headers,
+      body: JSON.stringify({ stepId: '', sectionKey: 'sectionA', state: {} }),
+    })
+    expect(invalidStatePatch.statusCode).toBe(400)
+
+    const missingStatePatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${randomUUID()}/draft/state`,
+      headers,
+      body: JSON.stringify({ stepId: 'section-a', sectionKey: 'sectionA', state: {} }),
+    })
+    expect(missingStatePatch.statusCode).toBe(404)
+
+    const immutableStatePatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${signedDraftId}/draft/state`,
+      headers: signedHeaders,
+      body: JSON.stringify({ stepId: 'section-a', sectionKey: 'sectionA', state: {} }),
+    })
+    expect(immutableStatePatch.statusCode).toBe(409)
+
+    const invalidStatusPatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${draftId}/status`,
+      headers,
+      body: JSON.stringify({ status: 'signed' }),
+    })
+    expect(invalidStatusPatch.statusCode).toBe(400)
+
+    const missingStatusPatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${randomUUID()}/status`,
+      headers,
+      body: JSON.stringify({ status: 'draft' }),
+    })
+    expect(missingStatusPatch.statusCode).toBe(404)
+
+    const invalidPatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${draftId}`,
+      headers,
+      body: JSON.stringify({ status: 'signed' }),
+    })
+    expect(invalidPatch.statusCode).toBe(400)
+
+    const missingPatch = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${randomUUID()}`,
+      headers,
+      body: JSON.stringify({ state: {} }),
+    })
+    expect(missingPatch.statusCode).toBe(404)
+
+    const invalidPut = await app.inject({
+      method: 'PUT',
+      url: `/eea2/${draftId}`,
+      headers,
+      body: JSON.stringify({ status: 'signed' }),
+    })
+    expect(invalidPut.statusCode).toBe(400)
+
+    const missingPut = await app.inject({
+      method: 'PUT',
+      url: `/eea2/${randomUUID()}`,
+      headers,
+      body: JSON.stringify({ state: {} }),
+    })
+    expect(missingPut.statusCode).toBe(404)
+
+    const immutablePut = await app.inject({
+      method: 'PUT',
+      url: `/eea2/${signedDraftId}`,
+      headers: signedHeaders,
+      body: JSON.stringify({ state: {} }),
+    })
+    expect(immutablePut.statusCode).toBe(409)
+  })
+})
+
 describe('POST /eea2/:formId/sign', () => {
   it('returns 403 for a wrong TOTP code without leaking totpSecret', async () => {
     const tenantId = await createTestTenant('EEA2 sign wrong TOTP')
@@ -250,6 +475,58 @@ describe('POST /eea2/:formId/sign', () => {
 })
 
 describe('POST /eea2/:formId/reject', () => {
+  it('returns validation, missing-draft, and wrong-status errors', async () => {
+    const tenantId = await createTestTenant('EEA2 reject errors')
+    const signerId = await seedUser(tenantId, { role: 'CEO' })
+    const draftId = await seedDraft(tenantId, 'draft')
+    const headers = jsonHeaders(tenantId, signerId, 'CEO')
+
+    const invalidBody = await app.inject({
+      method: 'POST',
+      url: `/eea2/${draftId}/reject`,
+      headers,
+      body: JSON.stringify({ reason: 'too short' }),
+    })
+    expect(invalidBody.statusCode).toBe(400)
+
+    const missingDraft = await app.inject({
+      method: 'POST',
+      url: `/eea2/${randomUUID()}/reject`,
+      headers,
+      body: JSON.stringify({ reason: 'This rejection reason is long enough.' }),
+    })
+    expect(missingDraft.statusCode).toBe(404)
+
+    const wrongStatus = await app.inject({
+      method: 'POST',
+      url: `/eea2/${draftId}/reject`,
+      headers,
+      body: JSON.stringify({ reason: 'This rejection reason is long enough.' }),
+    })
+    expect(wrongStatus.statusCode).toBe(409)
+  })
+
+  it('returns a pending form to draft even when no EE managers exist', async () => {
+    const tenantId = await createTestTenant('EEA2 reject without manager')
+    const signerId = await seedUser(tenantId, { role: 'CEO' })
+    const formId = await seedDraft(tenantId, 'pending_ceo')
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/eea2/${formId}/reject`,
+      headers: jsonHeaders(tenantId, signerId, 'CEO'),
+      body: JSON.stringify({ reason: 'The CEO requires a corrected Section H narrative.' }),
+    })
+
+    expect(response.statusCode).toBe(200)
+    expect(response.json()).toEqual({ status: 'draft' })
+    const notifications = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      return tx.notification.findMany({ where: { tenantId } })
+    })
+    expect(notifications).toHaveLength(0)
+  })
+
   it('returns the form to draft and notifies all EE managers in the tenant', async () => {
     const tenantId = await createTestTenant('EEA2 reject')
     const signerId = await seedUser(tenantId, { role: 'SENIOR_MANAGER' })
@@ -286,5 +563,18 @@ describe('POST /eea2/:formId/reject', () => {
       message: `EEA2 rejected: ${reason}`,
       read: false,
     })
+
+    const patchAfterRejection = await app.inject({
+      method: 'PATCH',
+      url: `/eea2/${formId}`,
+      headers: {
+        authorization: `Bearer ${issueJwt(tenantId, eeManagerId, 'EE_MANAGER')}`,
+        'content-type': 'application/json',
+      },
+      body: JSON.stringify({ state: { sectionH: { rejectionAddressed: true } } }),
+    })
+
+    expect(patchAfterRejection.statusCode).toBe(200)
+    expect(patchAfterRejection.json()).toEqual({ status: 'draft' })
   })
 })
