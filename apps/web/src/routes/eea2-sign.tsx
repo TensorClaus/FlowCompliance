@@ -17,7 +17,7 @@ export const Route = createRoute({
   path: '/eea2/$formId/sign',
   beforeLoad: () => {
     const role = getCurrentRole()
-    if (role !== null && !SIGNING_ROLES.has(role)) {
+    if (role === null || !SIGNING_ROLES.has(role)) {
       return redirect({ to: '/' })
     }
     return

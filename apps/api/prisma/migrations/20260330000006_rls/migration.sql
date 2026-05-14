@@ -10,7 +10,11 @@ BEGIN
 END
 $$;
 
-GRANT CONNECT ON DATABASE current_database() TO simplifi_app;
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO simplifi_app', current_database());
+END
+$$;
 GRANT USAGE ON SCHEMA public TO simplifi_app;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO simplifi_app;
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO simplifi_app;

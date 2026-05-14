@@ -73,7 +73,7 @@ async function seedUser(
 ): Promise<string> {
   const id = randomUUID()
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
     await tx.user.create({
       data: {
         id,
@@ -92,7 +92,7 @@ async function seedUser(
 async function seedDraft(tenantId: string, status: string): Promise<string> {
   const id = randomUUID()
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
     await tx.eea2Draft.create({
       data: {
         id,
@@ -170,7 +170,7 @@ describe('POST /eea2/:formId/sign', () => {
     expect(response.json()).toEqual({ status: 'signed' })
 
     const [event, draft] = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
       return Promise.all([
         tx.eeaEvent.findFirst({ where: { tenantId, formId, eventType: 'EEA2_SIGNED' } }),
         tx.eea2Draft.findUnique({ where: { id: formId } }),
@@ -204,6 +204,49 @@ describe('POST /eea2/:formId/sign', () => {
     expect(response.statusCode).toBe(409)
     expect(response.json()).toEqual({ error: 'Form is immutable' })
   })
+
+  it('does not allow generic draft mutation routes to sign the form', async () => {
+    const tenantId = await createTestTenant('EEA2 sign bypass')
+    const userId = await seedUser(tenantId, { role: 'EE_MANAGER' })
+    const formId = await seedDraft(tenantId, 'pending_ceo')
+
+    const responses = await Promise.all([
+      app.inject({
+        method: 'PATCH',
+        url: `/eea2/${formId}/status`,
+        headers: {
+          authorization: `Bearer ${issueJwt(tenantId, userId, 'EE_MANAGER')}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'signed' }),
+      }),
+      app.inject({
+        method: 'PATCH',
+        url: `/eea2/${formId}`,
+        headers: {
+          authorization: `Bearer ${issueJwt(tenantId, userId, 'EE_MANAGER')}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'signed' }),
+      }),
+      app.inject({
+        method: 'PUT',
+        url: `/eea2/${formId}`,
+        headers: {
+          authorization: `Bearer ${issueJwt(tenantId, userId, 'EE_MANAGER')}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({ status: 'signed' }),
+      }),
+    ])
+
+    expect(responses.map((response) => response.statusCode)).toEqual([400, 400, 400])
+    const draft = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      return tx.eea2Draft.findUnique({ where: { id: formId } })
+    })
+    expect(draft?.status).toBe('pending_ceo')
+  })
 })
 
 describe('POST /eea2/:formId/reject', () => {
@@ -228,7 +271,7 @@ describe('POST /eea2/:formId/reject', () => {
     expect(response.json()).toEqual({ status: 'draft' })
 
     const [draft, notification, event] = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
       return Promise.all([
         tx.eea2Draft.findUnique({ where: { id: formId } }),
         tx.notification.findFirst({ where: { tenantId, userId: eeManagerId } }),

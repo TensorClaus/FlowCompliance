@@ -33,12 +33,15 @@ export type TestRole = 'EE_MANAGER' | 'HR_DIRECTOR' | 'ADMIN' | 'CEO' | 'SENIOR_
  */
 export async function createTestTenant(name = 'Integration Test Tenant'): Promise<string> {
   const id = randomUUID()
-  await prisma.tenant.create({
-    data: {
-      id,
-      name,
-      kmsKeyId: 'local-dev-placeholder',
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${id}, true)`
+    await tx.tenant.create({
+      data: {
+        id,
+        name,
+        kmsKeyId: 'local-dev-placeholder',
+      },
+    })
   })
   return id
 }
@@ -98,7 +101,7 @@ export async function seedEvents(
     const createdAt = new Date(Date.now() + i * 1000)
 
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
       await tx.eeaEvent.create({
         data: {
           id,

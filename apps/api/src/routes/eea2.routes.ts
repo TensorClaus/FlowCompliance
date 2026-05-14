@@ -23,7 +23,7 @@ const rejectBodySchema = z
 
 const statusBodySchema = z
   .object({
-    status: z.enum(['draft', 'pending_ceo', 'signed', 'submitted']),
+    status: z.enum(['draft', 'pending_ceo', 'submitted']),
   })
   .strict()
 
@@ -31,15 +31,15 @@ const draftStateBodySchema = z
   .object({
     stepId: z.string().min(1),
     sectionKey: z.string().min(1),
-    state: z.record(z.unknown()),
+    state: z.record(z.string(), z.unknown()),
     completedSteps: z.array(z.string()).optional(),
   })
   .strict()
 
 const patchDraftBodySchema = z
   .object({
-    state: z.record(z.unknown()).optional(),
-    status: z.enum(['draft', 'pending_ceo', 'signed', 'submitted']).optional(),
+    state: z.record(z.string(), z.unknown()).optional(),
+    status: z.enum(['draft', 'pending_ceo', 'submitted']).optional(),
   })
   .strict()
 
@@ -51,15 +51,23 @@ function asJsonObject(value: unknown): JsonObject {
     : {}
 }
 
-async function findDraftForMutation(formId: string, tenantId: string) {
-  return prisma.eea2Draft.findFirst({
+type TenantTransaction = Prisma.TransactionClient
+
+async function setTenantContext(tx: TenantTransaction, tenantId: string): Promise<void> {
+  await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+}
+
+async function findDraftForMutation(tx: TenantTransaction, formId: string, tenantId: string) {
+  return tx.eea2Draft.findFirst({
     where: { id: formId, tenantId },
     select: { id: true, status: true, state: true },
   })
 }
 
 function getUserId(requestUser: { sub: string; userId?: unknown }): string {
-  return typeof requestUser.userId === 'string' ? requestUser.userId : requestUser.sub
+  return typeof requestUser.userId === 'string' && requestUser.userId.length > 0
+    ? requestUser.userId
+    : requestUser.sub
 }
 
 export function eea2Routes(app: FastifyInstance): void {
@@ -88,7 +96,7 @@ export function eea2Routes(app: FastifyInstance): void {
     const body = z
       .object({
         reportingYear: z.number().int().min(2000).max(2100),
-        state: z.record(z.unknown()).default({}),
+        state: z.record(z.string(), z.unknown()).default({}),
       })
       .strict()
       .safeParse(request.body)
@@ -113,35 +121,38 @@ export function eea2Routes(app: FastifyInstance): void {
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      const draft = await findDraftForMutation(formId, tenantId)
+      return prisma.$transaction(async (tx) => {
+        await setTenantContext(tx, tenantId)
+        const draft = await findDraftForMutation(tx, formId, tenantId)
 
-      if (draft === null) {
-        return reply.status(404).send({ error: 'Draft not found' })
-      }
+        if (draft === null) {
+          return reply.status(404).send({ error: 'Draft not found' })
+        }
 
-      if (draft.status === 'signed') {
-        return reply.status(409).send({ error: 'Form is immutable' })
-      }
+        if (draft.status === 'signed') {
+          return reply.status(409).send({ error: 'Form is immutable' })
+        }
 
-      const parsed = draftStateBodySchema.safeParse(request.body)
-      if (!parsed.success) {
-        return reply.status(400).send({ error: 'Invalid request body' })
-      }
+        const parsed = draftStateBodySchema.safeParse(request.body)
+        if (!parsed.success) {
+          return reply.status(400).send({ error: 'Invalid request body' })
+        }
 
-      const nextState = {
-        ...asJsonObject(draft.state),
-        ...parsed.data.state,
-        ...(parsed.data.completedSteps === undefined
-          ? {}
-          : { completedSteps: parsed.data.completedSteps }),
-      }
+        const nextState = {
+          ...asJsonObject(draft.state),
+          ...parsed.data.state,
+          ...(parsed.data.completedSteps === undefined
+            ? {}
+            : { completedSteps: parsed.data.completedSteps }),
+        }
 
-      await prisma.eea2Draft.update({
-        where: { id: formId },
-        data: { state: nextState as Prisma.InputJsonValue },
+        await tx.eea2Draft.update({
+          where: { id: formId },
+          data: { state: nextState as Prisma.InputJsonValue },
+        })
+
+        return reply.status(200).send({ status: draft.status })
       })
-
-      return reply.status(200).send({ status: draft.status })
     },
   )
 
@@ -150,27 +161,30 @@ export function eea2Routes(app: FastifyInstance): void {
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      const draft = await findDraftForMutation(formId, tenantId)
+      return prisma.$transaction(async (tx) => {
+        await setTenantContext(tx, tenantId)
+        const draft = await findDraftForMutation(tx, formId, tenantId)
 
-      if (draft === null) {
-        return reply.status(404).send({ error: 'Draft not found' })
-      }
+        if (draft === null) {
+          return reply.status(404).send({ error: 'Draft not found' })
+        }
 
-      if (draft.status === 'signed') {
-        return reply.status(409).send({ error: 'Form is immutable' })
-      }
+        if (draft.status === 'signed') {
+          return reply.status(409).send({ error: 'Form is immutable' })
+        }
 
-      const parsed = statusBodySchema.safeParse(request.body)
-      if (!parsed.success) {
-        return reply.status(400).send({ error: 'Invalid request body' })
-      }
+        const parsed = statusBodySchema.safeParse(request.body)
+        if (!parsed.success) {
+          return reply.status(400).send({ error: 'Invalid request body' })
+        }
 
-      await prisma.eea2Draft.update({
-        where: { id: formId },
-        data: { status: parsed.data.status },
+        await tx.eea2Draft.update({
+          where: { id: formId },
+          data: { status: parsed.data.status },
+        })
+
+        return reply.status(200).send({ status: parsed.data.status })
       })
-
-      return reply.status(200).send({ status: parsed.data.status })
     },
   )
 
@@ -179,7 +193,45 @@ export function eea2Routes(app: FastifyInstance): void {
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      const draft = await findDraftForMutation(formId, tenantId)
+      return prisma.$transaction(async (tx) => {
+        await setTenantContext(tx, tenantId)
+        const draft = await findDraftForMutation(tx, formId, tenantId)
+
+        if (draft === null) {
+          return reply.status(404).send({ error: 'Draft not found' })
+        }
+
+        if (draft.status === 'signed') {
+          return reply.status(409).send({ error: 'Form is immutable' })
+        }
+
+        const parsed = patchDraftBodySchema.safeParse(request.body)
+        if (!parsed.success) {
+          return reply.status(400).send({ error: 'Invalid request body' })
+        }
+
+        const data: Prisma.Eea2DraftUpdateInput = {}
+        if (parsed.data.status !== undefined) {
+          data.status = parsed.data.status
+        }
+        if (parsed.data.state !== undefined) {
+          data.state = {
+            ...asJsonObject(draft.state),
+            ...parsed.data.state,
+          } as Prisma.InputJsonValue
+        }
+
+        await tx.eea2Draft.update({ where: { id: formId }, data })
+
+        return reply.status(200).send({ status: parsed.data.status ?? draft.status })
+      })
+    },
+  )
+
+  app.put<{ Params: { id: string }; Body: unknown }>('/eea2/:id', async (request, reply) => {
+    return prisma.$transaction(async (tx) => {
+      await setTenantContext(tx, request.user.tenantId)
+      const draft = await findDraftForMutation(tx, request.params.id, request.user.tenantId)
 
       if (draft === null) {
         return reply.status(404).send({ error: 'Draft not found' })
@@ -194,55 +246,23 @@ export function eea2Routes(app: FastifyInstance): void {
         return reply.status(400).send({ error: 'Invalid request body' })
       }
 
-      const data: Prisma.Eea2DraftUpdateInput = {}
-      if (parsed.data.status !== undefined) {
-        data.status = parsed.data.status
-      }
-      if (parsed.data.state !== undefined) {
-        data.state = {
-          ...asJsonObject(draft.state),
-          ...parsed.data.state,
-        } as Prisma.InputJsonValue
-      }
-
-      await prisma.eea2Draft.update({ where: { id: formId }, data })
+      await tx.eea2Draft.update({
+        where: { id: request.params.id },
+        data: {
+          ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
+          ...(parsed.data.state === undefined
+            ? {}
+            : {
+                state: {
+                  ...asJsonObject(draft.state),
+                  ...parsed.data.state,
+                } as Prisma.InputJsonValue,
+              }),
+        },
+      })
 
       return reply.status(200).send({ status: parsed.data.status ?? draft.status })
-    },
-  )
-
-  app.put<{ Params: { id: string }; Body: unknown }>('/eea2/:id', async (request, reply) => {
-    const draft = await findDraftForMutation(request.params.id, request.user.tenantId)
-
-    if (draft === null) {
-      return reply.status(404).send({ error: 'Draft not found' })
-    }
-
-    if (draft.status === 'signed') {
-      return reply.status(409).send({ error: 'Form is immutable' })
-    }
-
-    const parsed = patchDraftBodySchema.safeParse(request.body)
-    if (!parsed.success) {
-      return reply.status(400).send({ error: 'Invalid request body' })
-    }
-
-    await prisma.eea2Draft.update({
-      where: { id: request.params.id },
-      data: {
-        ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
-        ...(parsed.data.state === undefined
-          ? {}
-          : {
-              state: {
-                ...asJsonObject(draft.state),
-                ...parsed.data.state,
-              } as Prisma.InputJsonValue,
-            }),
-      },
     })
-
-    return reply.status(200).send({ status: parsed.data.status ?? draft.status })
   })
 
   app.post<{ Params: { formId: string }; Body: unknown }>(
@@ -261,44 +281,45 @@ export function eea2Routes(app: FastifyInstance): void {
         return reply.status(400).send({ error: 'Confirmation is required' })
       }
 
-      const userId = getUserId(request.user)
-      const user = await prisma.user.findFirst({
-        where: { id: userId, tenantId: request.user.tenantId },
-        select: { id: true, name: true, totpSecret: true },
-      })
+      return prisma.$transaction(async (tx) => {
+        await setTenantContext(tx, request.user.tenantId)
+        const userId = getUserId(request.user)
+        const user = await tx.user.findFirst({
+          where: { id: userId, tenantId: request.user.tenantId },
+          select: { id: true, name: true, totpSecret: true },
+        })
 
-      if (user === null) {
-        return reply.status(403).send({ error: 'User not found' })
-      }
+        if (user === null) {
+          return reply.status(403).send({ error: 'User not found' })
+        }
 
-      if (user.totpSecret === null) {
-        return reply.status(403).send({ error: 'TOTP not configured' })
-      }
+        if (user.totpSecret === null) {
+          return reply.status(403).send({ error: 'TOTP not configured' })
+        }
 
-      const totp = new OTPAuth.TOTP({ secret: user.totpSecret })
-      const valid = totp.validate({ token: body.totpCode, window: 1 }) !== null
-      if (!valid) {
-        return reply.status(403).send({ error: 'Invalid TOTP code' })
-      }
+        const totp = new OTPAuth.TOTP({ secret: user.totpSecret })
+        const valid = totp.validate({ token: body.totpCode, window: 1 }) !== null
+        if (!valid) {
+          return reply.status(403).send({ error: 'Invalid TOTP code' })
+        }
 
-      const draft = await prisma.eea2Draft.findFirst({
-        where: { id: request.params.formId, tenantId: request.user.tenantId },
-        select: { id: true, status: true },
-      })
+        const draft = await tx.eea2Draft.findFirst({
+          where: { id: request.params.formId, tenantId: request.user.tenantId },
+          select: { id: true, status: true },
+        })
 
-      if (draft === null) {
-        return reply.status(404).send({ error: 'Draft not found' })
-      }
+        if (draft === null) {
+          return reply.status(404).send({ error: 'Draft not found' })
+        }
 
-      if (draft.status === 'signed') {
-        return reply.status(409).send({ error: 'Form is immutable' })
-      }
+        if (draft.status === 'signed') {
+          return reply.status(409).send({ error: 'Form is immutable' })
+        }
 
-      if (body.typedName.toLowerCase() !== (user.name ?? '').toLowerCase()) {
-        return reply.status(403).send({ error: 'Name does not match' })
-      }
+        if (body.typedName.toLowerCase() !== (user.name ?? '').toLowerCase()) {
+          return reply.status(403).send({ error: 'Name does not match' })
+        }
 
-      await prisma.$transaction(async (tx) => {
         await tx.eeaEvent.create({
           data: {
             tenantId: request.user.tenantId,
@@ -316,9 +337,9 @@ export function eea2Routes(app: FastifyInstance): void {
           where: { id: request.params.formId },
           data: { status: 'signed' },
         })
-      })
 
-      return reply.status(200).send({ status: 'signed' })
+        return reply.status(200).send({ status: 'signed' })
+      })
     },
   )
 
@@ -336,25 +357,26 @@ export function eea2Routes(app: FastifyInstance): void {
       const { formId } = request.params
       const tenantId = request.user.tenantId
       const userId = getUserId(request.user)
-      const draft = await prisma.eea2Draft.findFirst({
-        where: { id: formId, tenantId },
-        select: { id: true, status: true },
-      })
+      return prisma.$transaction(async (tx) => {
+        await setTenantContext(tx, tenantId)
+        const draft = await tx.eea2Draft.findFirst({
+          where: { id: formId, tenantId },
+          select: { id: true, status: true },
+        })
 
-      if (draft === null) {
-        return reply.status(404).send({ error: 'Draft not found' })
-      }
+        if (draft === null) {
+          return reply.status(404).send({ error: 'Draft not found' })
+        }
 
-      if (draft.status !== 'pending_ceo') {
-        return reply.status(409).send({ error: 'Form is not pending CEO signing' })
-      }
+        if (draft.status !== 'pending_ceo') {
+          return reply.status(409).send({ error: 'Form is not pending CEO signing' })
+        }
 
-      const eeManagers = await prisma.user.findMany({
-        where: { tenantId, role: 'EE_MANAGER' },
-        select: { id: true },
-      })
+        const eeManagers = await tx.user.findMany({
+          where: { tenantId, role: 'EE_MANAGER' },
+          select: { id: true },
+        })
 
-      await prisma.$transaction(async (tx) => {
         await tx.eeaEvent.create({
           data: {
             tenantId,
@@ -382,9 +404,9 @@ export function eea2Routes(app: FastifyInstance): void {
             })),
           })
         }
-      })
 
-      return reply.status(200).send({ status: 'draft' })
+        return reply.status(200).send({ status: 'draft' })
+      })
     },
   )
 }
