@@ -250,6 +250,7 @@ export {
 // EEA UI reference data — PII field paths and field labels for audit history
 export { PII_FIELD_PATHS } from './eea/pii-fields.js'
 export { FIELD_LABELS } from './eea/field-labels.js'
+export { EEA2_DECLARATION_TEXT } from './eea/declarations.js'
 
 // Cross-form validation rules
 export {

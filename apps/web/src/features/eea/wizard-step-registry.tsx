@@ -1,5 +1,5 @@
 import { OccupationalMatrixSchema, type OccupationalMatrix } from '@simplifi/shared'
-import { useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { z } from 'zod'
 import { PercentageSliders } from './components/PercentageSliders'
 import { EmployerDetailsForm } from './components/employer-details-form'
@@ -189,6 +189,17 @@ export const getSectionBData = (value: unknown): SectionBData => {
   }
 }
 
+function ReadOnlyField({ label, value }: { label: string; value: string | number | boolean }) {
+  return (
+    <div className="grid gap-1">
+      <span className="text-sm font-medium">{label}</span>
+      <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+        {String(value)}
+      </span>
+    </div>
+  )
+}
+
 export const calculateSectionBTotals = (
   sectionB: SectionBData,
 ): NonNullable<WizardContext['sectionBTotals']> => {
@@ -211,7 +222,7 @@ function SectionAEmployerDetailsComposition() {
   )
 }
 
-export function SectionAStep(_props: StepProps) {
+export function SectionAStep({ isLocked = false }: StepProps) {
   const { tenantId, reportingYear, prefillOptions, formState, setStepData } =
     useWizardFormController()
   const { data } = usePrefill(tenantId, reportingYear, {
@@ -259,6 +270,25 @@ export function SectionAStep(_props: StepProps) {
       ...sectionA,
       [field]: value,
     })
+  }
+
+  if (isLocked) {
+    return (
+      <section aria-label="Section A" className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <ReadOnlyField label="Registration number" value={sectionA.registrationNumber} />
+          <ReadOnlyField label="Sector" value={sectionA.sector} />
+          <ReadOnlyField label="Province" value={sectionA.province} />
+          <ReadOnlyField
+            label="Total employees prior year"
+            value={sectionA.totalEmployeesPriorYear}
+          />
+          <ReadOnlyField label="Primary contact name" value={sectionA.primaryContactName} />
+          <ReadOnlyField label="Primary contact email" value={sectionA.primaryContactEmail} />
+          <ReadOnlyField label="Reporting year" value={sectionA.reportingYear} />
+        </div>
+      </section>
+    )
   }
 
   return (
@@ -348,7 +378,7 @@ const sectionBRows = [
   ['contract', 'Contract workers'],
 ] as const
 
-export function SectionBStep(_props: StepProps) {
+export function SectionBStep({ isLocked = false }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const sectionB = getSectionBData(formState['section-b'])
   const totals = calculateSectionBTotals(sectionB)
@@ -394,37 +424,49 @@ export function SectionBStep(_props: StepProps) {
                 <tr key={rowKey}>
                   <th className="border border-slate-300 px-3 py-2 text-left">{rowLabel}</th>
                   <td className="border border-slate-300 px-3 py-2">
-                    <input
-                      aria-label={`${rowLabel} male`}
-                      className="w-28 rounded border border-slate-300 px-2 py-1"
-                      min={0}
-                      onChange={(event): void => {
-                        updateRow(rowKey, 'male', Number(event.target.value))
-                      }}
-                      type="number"
-                      value={row.male}
-                    />
+                    {isLocked ? (
+                      <span>{row.male}</span>
+                    ) : (
+                      <input
+                        aria-label={`${rowLabel} male`}
+                        className="w-28 rounded border border-slate-300 px-2 py-1"
+                        min={0}
+                        onChange={(event): void => {
+                          updateRow(rowKey, 'male', Number(event.target.value))
+                        }}
+                        type="number"
+                        value={row.male}
+                      />
+                    )}
                   </td>
                   <td className="border border-slate-300 px-3 py-2">
-                    <input
-                      aria-label={`${rowLabel} female`}
-                      className="w-28 rounded border border-slate-300 px-2 py-1"
-                      min={0}
-                      onChange={(event): void => {
-                        updateRow(rowKey, 'female', Number(event.target.value))
-                      }}
-                      type="number"
-                      value={row.female}
-                    />
+                    {isLocked ? (
+                      <span>{row.female}</span>
+                    ) : (
+                      <input
+                        aria-label={`${rowLabel} female`}
+                        className="w-28 rounded border border-slate-300 px-2 py-1"
+                        min={0}
+                        onChange={(event): void => {
+                          updateRow(rowKey, 'female', Number(event.target.value))
+                        }}
+                        type="number"
+                        value={row.female}
+                      />
+                    )}
                   </td>
                   <td className="border border-slate-300 px-3 py-2">
-                    <input
-                      aria-label={`${rowLabel} total`}
-                      className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
-                      readOnly
-                      type="number"
-                      value={rowTotal}
-                    />
+                    {isLocked ? (
+                      <span>{rowTotal}</span>
+                    ) : (
+                      <input
+                        aria-label={`${rowLabel} total`}
+                        className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
+                        readOnly
+                        type="number"
+                        value={rowTotal}
+                      />
+                    )}
                   </td>
                 </tr>
               )
@@ -432,37 +474,55 @@ export function SectionBStep(_props: StepProps) {
             <tr>
               <th className="border border-slate-300 px-3 py-2 text-left">Grand total</th>
               <td className="border border-slate-300 px-3 py-2">
-                <input
-                  aria-label="Grand total male"
-                  className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
-                  readOnly
-                  type="number"
-                  value={
-                    sectionB.permanent.male + sectionB.nonPermanent.male + sectionB.contract.male
-                  }
-                />
+                {isLocked ? (
+                  <span>
+                    {sectionB.permanent.male + sectionB.nonPermanent.male + sectionB.contract.male}
+                  </span>
+                ) : (
+                  <input
+                    aria-label="Grand total male"
+                    className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
+                    readOnly
+                    type="number"
+                    value={
+                      sectionB.permanent.male + sectionB.nonPermanent.male + sectionB.contract.male
+                    }
+                  />
+                )}
               </td>
               <td className="border border-slate-300 px-3 py-2">
-                <input
-                  aria-label="Grand total female"
-                  className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
-                  readOnly
-                  type="number"
-                  value={
-                    sectionB.permanent.female +
-                    sectionB.nonPermanent.female +
-                    sectionB.contract.female
-                  }
-                />
+                {isLocked ? (
+                  <span>
+                    {sectionB.permanent.female +
+                      sectionB.nonPermanent.female +
+                      sectionB.contract.female}
+                  </span>
+                ) : (
+                  <input
+                    aria-label="Grand total female"
+                    className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
+                    readOnly
+                    type="number"
+                    value={
+                      sectionB.permanent.female +
+                      sectionB.nonPermanent.female +
+                      sectionB.contract.female
+                    }
+                  />
+                )}
               </td>
               <td className="border border-slate-300 px-3 py-2">
-                <input
-                  aria-label="Grand total"
-                  className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
-                  readOnly
-                  type="number"
-                  value={totals.grandTotal}
-                />
+                {isLocked ? (
+                  <span>{totals.grandTotal}</span>
+                ) : (
+                  <input
+                    aria-label="Grand total"
+                    className="w-28 rounded border border-slate-300 bg-slate-50 px-2 py-1"
+                    readOnly
+                    type="number"
+                    value={totals.grandTotal}
+                  />
+                )}
               </td>
             </tr>
           </tbody>
@@ -472,7 +532,7 @@ export function SectionBStep(_props: StepProps) {
   )
 }
 
-export function SectionC1Step({ wizardContext, updateWizardContext }: StepProps) {
+export function SectionC1Step({ isLocked = false, wizardContext, updateWizardContext }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const matrix = getOccupationalMatrix(formState['section-c1'])
   const actual = matrix.grandTotal.total.value
@@ -503,7 +563,7 @@ export function SectionC1Step({ wizardContext, updateWizardContext }: StepProps)
         data={matrix}
         disabilityHeadcount={0}
         isDesignatedEmployer={false}
-        mode="edit"
+        mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {
           setStepData('section-c1', updated)
           const grandTotal = updated.grandTotal.total.value
@@ -516,7 +576,7 @@ export function SectionC1Step({ wizardContext, updateWizardContext }: StepProps)
   )
 }
 
-export function SectionC2Step(_props: StepProps) {
+export function SectionC2Step({ isLocked = false }: StepProps) {
   const { tenantId, formState, setStepData } = useWizardFormController()
   const matrix = getOccupationalMatrix(formState['section-c2'])
 
@@ -565,7 +625,7 @@ export function SectionC2Step(_props: StepProps) {
       <OccupationalMatrixComponent
         data={matrix}
         isDesignatedEmployer={false}
-        mode="edit"
+        mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {
           setStepData('section-c2', updated)
         }}
@@ -574,7 +634,7 @@ export function SectionC2Step(_props: StepProps) {
   )
 }
 
-export function SectionD1Step(_props: StepProps) {
+export function SectionD1Step({ isLocked = false }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const matrix = getOccupationalMatrix(formState['section-d1'])
 
@@ -583,7 +643,7 @@ export function SectionD1Step(_props: StepProps) {
       <OccupationalMatrixComponent
         data={matrix}
         isDesignatedEmployer={false}
-        mode="edit"
+        mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {
           setStepData('section-d1', updated)
         }}
@@ -592,7 +652,7 @@ export function SectionD1Step(_props: StepProps) {
   )
 }
 
-export function SectionD2Step(_props: StepProps) {
+export function SectionD2Step({ isLocked = false }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const trainingSpend = getTrainingSpendData(formState['section-d2'])
   const percentageTotal = trainingSpend.percentages.reduce((sum, value) => sum + value, 0)
@@ -602,6 +662,24 @@ export function SectionD2Step(_props: StepProps) {
       ...trainingSpend,
       ...patch,
     })
+  }
+
+  if (isLocked) {
+    return (
+      <section aria-label="Section D training spend" className="grid gap-4">
+        <ReadOnlyField label="Total training budget (ZAR)" value={trainingSpend.totalBudget} />
+        <div className="grid gap-2">
+          {trainingSpendGroups.map((group, index) => (
+            <ReadOnlyField
+              key={group}
+              label={group}
+              value={`${String(trainingSpend.percentages[index] ?? 0)}%`}
+            />
+          ))}
+        </div>
+        <ReadOnlyField label="Training spend narrative" value={trainingSpend.narrative} />
+      </section>
+    )
   }
 
   return (
@@ -656,10 +734,156 @@ function PlaceholderStep(_props: StepProps) {
   )
 }
 
-function ReviewStep(_props: StepProps) {
+function BarrierTerminationBanner() {
+  return (
+    <div
+      className="rounded border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+      data-testid="barrier-termination-banner"
+      role="alert"
+    >
+      Termination patterns indicate a possible affirmative-action barrier. This finding is locked
+      into the audit log and must be reviewed by the EE Committee.
+    </div>
+  )
+}
+
+function AccommodationOverdueBanner() {
+  return (
+    <div
+      className="rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
+      data-testid="accommodation-overdue-banner"
+      role="alert"
+    >
+      One or more reasonable-accommodation requests have been pending for more than 21 days. Resolve
+      the overdue request before CEO signing.
+    </div>
+  )
+}
+
+const reviewSections = [
+  ['section-a', 'Section A - Employer details'],
+  ['section-b', 'Section B - Workforce totals'],
+  ['section-c1', 'Section C - Current workforce'],
+  ['section-c2', 'Section C - Numerical goals'],
+  ['section-d1', 'Section D - Trained employees'],
+  ['section-d2', 'Section D - Training spend'],
+  ['section-e-sector-targets', 'Section E - Sector targets'],
+  ['section-e-next-year-targets', 'Section E - Next year targets'],
+  ['section-f-consultation', 'Section F - Consultation'],
+  ['section-f-barriers', 'Section F - Barriers'],
+  ['section-g-monitoring', 'Section G - Monitoring'],
+  ['section-h-declaration', 'Section H - Declaration'],
+  ['section-h-hitl', 'Section H - Human review'],
+] as const
+
+function formatSummaryValue(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+  if (value === null) return 'none'
+  return 'captured'
+}
+
+function summariseSection(value: unknown): string {
+  if (value === undefined) return 'No data captured'
+  if (typeof value !== 'object' || value === null) return formatSummaryValue(value)
+  const entries = Object.entries(value as Record<string, unknown>)
+  if (entries.length === 0) return 'No data captured'
+  return entries
+    .slice(0, 4)
+    .map(([key, entryValue]) => `${key}: ${formatSummaryValue(entryValue)}`)
+    .join(' | ')
+}
+
+function ReviewStep({
+  completedSteps,
+  formId,
+  goToStep,
+  isLocked = false,
+  wizardContext,
+}: StepProps) {
+  const { formState } = useWizardFormController()
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const isSubmitDisabled = useMemo(() => {
+    const hasIncompleteStep = reviewSections.some(([stepId]) => !completedSteps.has(stepId))
+    return (
+      hasIncompleteStep ||
+      wizardContext.disabilityFlagActive ||
+      wizardContext.barrierTerminationFlag ||
+      wizardContext.accommodationOverdueFlag ||
+      isSubmitting
+    )
+  }, [completedSteps, isSubmitting, wizardContext])
+
+  const submitForSigning = async (): Promise<void> => {
+    if (isSubmitDisabled) return
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      const response = await fetch(`/api/eea2/${encodeURIComponent(formId)}/status`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ status: 'pending_ceo' }),
+      })
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string }
+        throw new Error(payload.error ?? 'Unable to submit for signing')
+      }
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Unable to submit for signing')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <section aria-label="Review and submit" className="grid gap-4">
-      <p className="text-sm text-slate-700">Review placeholder for the completed EEA2 wizard.</p>
+      {wizardContext.disabilityFlagActive ? (
+        <DisabilityFlagBanner headcount={0} percentage={0} total={1} />
+      ) : null}
+      {wizardContext.barrierTerminationFlag ? <BarrierTerminationBanner /> : null}
+      {wizardContext.accommodationOverdueFlag ? <AccommodationOverdueBanner /> : null}
+
+      <div className="grid gap-3">
+        {reviewSections.map(([stepId, label]) => (
+          <section className="border border-slate-200 p-3" key={stepId}>
+            <div className="flex items-start justify-between gap-3">
+              <div className="grid gap-1">
+                <h2 className="text-sm font-semibold text-slate-900">{label}</h2>
+                <p className="text-sm text-slate-600">{summariseSection(formState[stepId])}</p>
+              </div>
+              {isLocked ? null : (
+                <button
+                  className="rounded border border-slate-300 px-3 py-1.5 text-sm font-medium"
+                  onClick={(): void => {
+                    goToStep(stepId)
+                  }}
+                  type="button"
+                >
+                  Edit
+                </button>
+              )}
+            </div>
+          </section>
+        ))}
+      </div>
+
+      {isLocked ? null : (
+        <>
+          {submitError ? <p className="text-sm text-red-700">{submitError}</p> : null}
+          <button
+            className="w-fit rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            disabled={isSubmitDisabled}
+            onClick={(): void => {
+              void submitForSigning()
+            }}
+            type="button"
+          >
+            Submit for CEO signing
+          </button>
+        </>
+      )}
     </section>
   )
 }

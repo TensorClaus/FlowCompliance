@@ -1,47 +1,390 @@
 import type { FastifyInstance } from 'fastify'
+import * as OTPAuth from 'otpauth'
+import { z } from 'zod'
+import type { Prisma } from '../generated/prisma/client.js'
+import { prisma } from '../lib/prisma.js'
+import { requireJwt, requireRole, requireTenant } from '../plugins/auth.js'
 
-// ─── Route registration ───────────────────────────────────────────────────────
+const SIGNING_ROLES = ['CEO', 'SENIOR_MANAGER']
+
+const signBodySchema = z
+  .object({
+    totpCode: z.string().length(6),
+    typedName: z.string().min(1),
+    confirmationChecked: z.boolean(),
+  })
+  .strict()
+
+const rejectBodySchema = z
+  .object({
+    reason: z.string().min(20),
+  })
+  .strict()
+
+const statusBodySchema = z
+  .object({
+    status: z.enum(['draft', 'pending_ceo', 'signed', 'submitted']),
+  })
+  .strict()
+
+const draftStateBodySchema = z
+  .object({
+    stepId: z.string().min(1),
+    sectionKey: z.string().min(1),
+    state: z.record(z.unknown()),
+    completedSteps: z.array(z.string()).optional(),
+  })
+  .strict()
+
+const patchDraftBodySchema = z
+  .object({
+    state: z.record(z.unknown()).optional(),
+    status: z.enum(['draft', 'pending_ceo', 'signed', 'submitted']).optional(),
+  })
+  .strict()
+
+type JsonObject = Record<string, unknown>
+
+function asJsonObject(value: unknown): JsonObject {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {}
+}
+
+async function findDraftForMutation(formId: string, tenantId: string) {
+  return prisma.eea2Draft.findFirst({
+    where: { id: formId, tenantId },
+    select: { id: true, status: true, state: true },
+  })
+}
+
+function getUserId(requestUser: { sub: string; userId?: unknown }): string {
+  return typeof requestUser.userId === 'string' ? requestUser.userId : requestUser.sub
+}
 
 export function eea2Routes(app: FastifyInstance): void {
-  /**
-   * GET /eea2
-   *
-   * List all EEA2 annual report drafts for the authenticated tenant.
-   * EEA2 is the annual submission to the DEL portal, due 1–15 January each year
-   * under rule_eea_016 of the Employment Equity Act.
-   * Not yet implemented.
-   */
-  app.get('/eea2', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
+  app.get('/eea2', async (request, reply) => {
+    const drafts = await prisma.eea2Draft.findMany({
+      where: { tenantId: request.user.tenantId },
+      orderBy: { updatedAt: 'desc' },
+    })
+
+    return reply.status(200).send({ drafts })
   })
 
-  /**
-   * GET /eea2/:id
-   *
-   * Retrieve a single EEA2 draft by ID.
-   * Not yet implemented.
-   */
-  app.get<{ Params: { id: string } }>('/eea2/:id', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
+  app.get<{ Params: { id: string } }>('/eea2/:id', async (request, reply) => {
+    const draft = await prisma.eea2Draft.findFirst({
+      where: { id: request.params.id, tenantId: request.user.tenantId },
+    })
+
+    if (draft === null) {
+      return reply.status(404).send({ error: 'Draft not found' })
+    }
+
+    return reply.status(200).send(draft)
   })
 
-  /**
-   * POST /eea2
-   *
-   * Create a new EEA2 draft for the authenticated tenant.
-   * Not yet implemented.
-   */
-  app.post<{ Body: unknown }>('/eea2', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
+  app.post<{ Body: unknown }>('/eea2', async (request, reply) => {
+    const body = z
+      .object({
+        reportingYear: z.number().int().min(2000).max(2100),
+        state: z.record(z.unknown()).default({}),
+      })
+      .strict()
+      .safeParse(request.body)
+
+    if (!body.success) {
+      return reply.status(400).send({ error: 'Invalid request body' })
+    }
+
+    const draft = await prisma.eea2Draft.create({
+      data: {
+        tenantId: request.user.tenantId,
+        reportingYear: body.data.reportingYear,
+        state: body.data.state as Prisma.InputJsonValue,
+      },
+    })
+
+    return reply.status(201).send(draft)
   })
 
-  /**
-   * PUT /eea2/:id
-   *
-   * Update an existing EEA2 draft by ID.
-   * Not yet implemented.
-   */
-  app.put<{ Params: { id: string }; Body: unknown }>('/eea2/:id', async (_request, reply) => {
-    return reply.status(501).send({ error: 'Not Implemented' })
+  app.patch<{ Params: { formId: string }; Body: unknown }>(
+    '/eea2/:formId/draft/state',
+    async (request, reply) => {
+      const { formId } = request.params
+      const tenantId = request.user.tenantId
+      const draft = await findDraftForMutation(formId, tenantId)
+
+      if (draft === null) {
+        return reply.status(404).send({ error: 'Draft not found' })
+      }
+
+      if (draft.status === 'signed') {
+        return reply.status(409).send({ error: 'Form is immutable' })
+      }
+
+      const parsed = draftStateBodySchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' })
+      }
+
+      const nextState = {
+        ...asJsonObject(draft.state),
+        ...parsed.data.state,
+        ...(parsed.data.completedSteps === undefined
+          ? {}
+          : { completedSteps: parsed.data.completedSteps }),
+      }
+
+      await prisma.eea2Draft.update({
+        where: { id: formId },
+        data: { state: nextState as Prisma.InputJsonValue },
+      })
+
+      return reply.status(200).send({ status: draft.status })
+    },
+  )
+
+  app.patch<{ Params: { formId: string }; Body: unknown }>(
+    '/eea2/:formId/status',
+    async (request, reply) => {
+      const { formId } = request.params
+      const tenantId = request.user.tenantId
+      const draft = await findDraftForMutation(formId, tenantId)
+
+      if (draft === null) {
+        return reply.status(404).send({ error: 'Draft not found' })
+      }
+
+      if (draft.status === 'signed') {
+        return reply.status(409).send({ error: 'Form is immutable' })
+      }
+
+      const parsed = statusBodySchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' })
+      }
+
+      await prisma.eea2Draft.update({
+        where: { id: formId },
+        data: { status: parsed.data.status },
+      })
+
+      return reply.status(200).send({ status: parsed.data.status })
+    },
+  )
+
+  app.patch<{ Params: { formId: string }; Body: unknown }>(
+    '/eea2/:formId',
+    async (request, reply) => {
+      const { formId } = request.params
+      const tenantId = request.user.tenantId
+      const draft = await findDraftForMutation(formId, tenantId)
+
+      if (draft === null) {
+        return reply.status(404).send({ error: 'Draft not found' })
+      }
+
+      if (draft.status === 'signed') {
+        return reply.status(409).send({ error: 'Form is immutable' })
+      }
+
+      const parsed = patchDraftBodySchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' })
+      }
+
+      const data: Prisma.Eea2DraftUpdateInput = {}
+      if (parsed.data.status !== undefined) {
+        data.status = parsed.data.status
+      }
+      if (parsed.data.state !== undefined) {
+        data.state = {
+          ...asJsonObject(draft.state),
+          ...parsed.data.state,
+        } as Prisma.InputJsonValue
+      }
+
+      await prisma.eea2Draft.update({ where: { id: formId }, data })
+
+      return reply.status(200).send({ status: parsed.data.status ?? draft.status })
+    },
+  )
+
+  app.put<{ Params: { id: string }; Body: unknown }>('/eea2/:id', async (request, reply) => {
+    const draft = await findDraftForMutation(request.params.id, request.user.tenantId)
+
+    if (draft === null) {
+      return reply.status(404).send({ error: 'Draft not found' })
+    }
+
+    if (draft.status === 'signed') {
+      return reply.status(409).send({ error: 'Form is immutable' })
+    }
+
+    const parsed = patchDraftBodySchema.safeParse(request.body)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid request body' })
+    }
+
+    await prisma.eea2Draft.update({
+      where: { id: request.params.id },
+      data: {
+        ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
+        ...(parsed.data.state === undefined
+          ? {}
+          : {
+              state: {
+                ...asJsonObject(draft.state),
+                ...parsed.data.state,
+              } as Prisma.InputJsonValue,
+            }),
+      },
+    })
+
+    return reply.status(200).send({ status: parsed.data.status ?? draft.status })
   })
+
+  app.post<{ Params: { formId: string }; Body: unknown }>(
+    '/eea2/:formId/sign',
+    {
+      preHandler: [requireJwt, requireTenant, requireRole(SIGNING_ROLES)],
+    },
+    async (request, reply) => {
+      const parsed = signBodySchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' })
+      }
+
+      const body = parsed.data
+      if (!body.confirmationChecked) {
+        return reply.status(400).send({ error: 'Confirmation is required' })
+      }
+
+      const userId = getUserId(request.user)
+      const user = await prisma.user.findFirst({
+        where: { id: userId, tenantId: request.user.tenantId },
+        select: { id: true, name: true, totpSecret: true },
+      })
+
+      if (user === null) {
+        return reply.status(403).send({ error: 'User not found' })
+      }
+
+      if (user.totpSecret === null) {
+        return reply.status(403).send({ error: 'TOTP not configured' })
+      }
+
+      const totp = new OTPAuth.TOTP({ secret: user.totpSecret })
+      const valid = totp.validate({ token: body.totpCode, window: 1 }) !== null
+      if (!valid) {
+        return reply.status(403).send({ error: 'Invalid TOTP code' })
+      }
+
+      const draft = await prisma.eea2Draft.findFirst({
+        where: { id: request.params.formId, tenantId: request.user.tenantId },
+        select: { id: true, status: true },
+      })
+
+      if (draft === null) {
+        return reply.status(404).send({ error: 'Draft not found' })
+      }
+
+      if (draft.status === 'signed') {
+        return reply.status(409).send({ error: 'Form is immutable' })
+      }
+
+      if (body.typedName.toLowerCase() !== (user.name ?? '').toLowerCase()) {
+        return reply.status(403).send({ error: 'Name does not match' })
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await tx.eeaEvent.create({
+          data: {
+            tenantId: request.user.tenantId,
+            formType: 'EEA2',
+            formId: request.params.formId,
+            eventType: 'EEA2_SIGNED',
+            metadata: {
+              userId: user.id,
+              totpVerified: true,
+              typedName: body.typedName,
+            },
+          },
+        })
+        await tx.eea2Draft.update({
+          where: { id: request.params.formId },
+          data: { status: 'signed' },
+        })
+      })
+
+      return reply.status(200).send({ status: 'signed' })
+    },
+  )
+
+  app.post<{ Params: { formId: string }; Body: unknown }>(
+    '/eea2/:formId/reject',
+    {
+      preHandler: [requireJwt, requireTenant, requireRole(SIGNING_ROLES)],
+    },
+    async (request, reply) => {
+      const parsed = rejectBodySchema.safeParse(request.body)
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid request body' })
+      }
+
+      const { formId } = request.params
+      const tenantId = request.user.tenantId
+      const userId = getUserId(request.user)
+      const draft = await prisma.eea2Draft.findFirst({
+        where: { id: formId, tenantId },
+        select: { id: true, status: true },
+      })
+
+      if (draft === null) {
+        return reply.status(404).send({ error: 'Draft not found' })
+      }
+
+      if (draft.status !== 'pending_ceo') {
+        return reply.status(409).send({ error: 'Form is not pending CEO signing' })
+      }
+
+      const eeManagers = await prisma.user.findMany({
+        where: { tenantId, role: 'EE_MANAGER' },
+        select: { id: true },
+      })
+
+      await prisma.$transaction(async (tx) => {
+        await tx.eeaEvent.create({
+          data: {
+            tenantId,
+            formType: 'EEA2',
+            formId,
+            eventType: 'EEA2_REJECTED',
+            metadata: {
+              userId,
+              reason: parsed.data.reason,
+            },
+          },
+        })
+        await tx.eea2Draft.update({
+          where: { id: formId },
+          data: { status: 'draft' },
+        })
+        if (eeManagers.length > 0) {
+          await tx.notification.createMany({
+            data: eeManagers.map((user) => ({
+              tenantId,
+              userId: user.id,
+              role: 'EE_MANAGER',
+              message: `EEA2 rejected: ${parsed.data.reason}`,
+              read: false,
+            })),
+          })
+        }
+      })
+
+      return reply.status(200).send({ status: 'draft' })
+    },
+  )
 }

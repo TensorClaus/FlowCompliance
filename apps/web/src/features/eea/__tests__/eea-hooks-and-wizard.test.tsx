@@ -9,12 +9,14 @@ import {
   type OccupationalMatrix,
   type Result,
 } from '@simplifi/shared'
+import { EEA2_DECLARATION_TEXT } from '@simplifi/shared'
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   EEAWizard,
+  EEA2SigningCeremonyPage,
   EmployerDetailsForm,
   EVENT_EMITTER_ENDPOINT,
   PREFILL_ENDPOINT,
@@ -938,5 +940,66 @@ describe('EEA hooks and wizard', () => {
     expect(confirmNavigation).toHaveBeenCalledWith(UNSAVED_CHANGES_WARNING)
     const completedState = onComplete.mock.calls[0]?.[0]
     expect(completedState?.['section-a']).toMatchObject({ primaryContactName: 'Rivaan' })
+  })
+
+  it('Review disables submit with a real disabled attribute when disability flag is active', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <EEAWizard
+        confirmNavigation={() => true}
+        formId="form-123"
+        initialWizardContext={{
+          disabilityFlagActive: true,
+          barrierTerminationFlag: false,
+          accommodationOverdueFlag: false,
+          sectionBTotals: null,
+        }}
+        patchDraftState={createPatchDraftState()}
+      />,
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Review and submit' }))
+
+    expect(screen.getByTestId('disability-flag-banner')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Submit for CEO signing' })).toBeDisabled()
+    expect(document.querySelector('[data-dismiss]')).toBeNull()
+    expect(document.querySelector('[data-close]')).toBeNull()
+  })
+
+  it('Signing ceremony uses the shared declaration text and gates submission on all fields', async () => {
+    const user = userEvent.setup()
+    const signRequest = vi.fn(() => Promise.resolve({ status: 'signed' as const }))
+    const navigateToLockedView = vi.fn()
+
+    render(
+      <EEA2SigningCeremonyPage
+        formId="form-123"
+        navigateToLockedView={navigateToLockedView}
+        signRequest={signRequest}
+      />,
+    )
+
+    const signButton = screen.getByRole('button', { name: 'Confirm and Sign' })
+    expect(screen.getByLabelText(EEA2_DECLARATION_TEXT)).toBeInTheDocument()
+    expect(signButton).toBeDisabled()
+
+    await user.type(screen.getByLabelText('TOTP code'), '123456')
+    await user.type(
+      screen.getByPlaceholderText('Type your full registered name exactly'),
+      'Rivaan Pillay',
+    )
+    await user.click(screen.getByLabelText(EEA2_DECLARATION_TEXT))
+
+    expect(signButton).toBeEnabled()
+    await user.click(signButton)
+
+    expect(signRequest).toHaveBeenCalledWith({
+      formId: 'form-123',
+      totpCode: '123456',
+      typedName: 'Rivaan Pillay',
+      confirmationChecked: true,
+    })
+    expect(navigateToLockedView).toHaveBeenCalledWith('form-123')
   })
 })

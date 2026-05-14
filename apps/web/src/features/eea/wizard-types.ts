@@ -18,8 +18,11 @@ export type WizardContext = {
 export type StepProps = {
   formId: string
   wizardContext: WizardContext
+  completedSteps: Set<StepId>
   updateWizardContext: (patch: Partial<WizardContext>) => void
+  goToStep: (stepId: StepId) => void
   onAdvance: () => void
+  isLocked?: boolean
 }
 
 export type StepRegistry = Record<

@@ -29,7 +29,7 @@ function getSkillsData(value: unknown): SectionGSkillsData {
   }
 }
 
-export function SectionGSkillsDevStep(_props: StepProps) {
+export function SectionGSkillsDevStep({ isLocked = false }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const stepKey = 'section-g-monitoring'
   const data = getSkillsData(formState[stepKey])
@@ -53,37 +53,56 @@ export function SectionGSkillsDevStep(_props: StepProps) {
       <OccupationalMatrixComponent
         data={data.matrix}
         isDesignatedEmployer={false}
-        mode="edit"
+        mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {
           update({ matrix: updated })
         }}
       />
-      <label className="flex items-center gap-2 text-sm font-medium">
-        <input
-          aria-label="WSP submitted to the SETA"
-          checked={data.wspSubmitted}
-          onChange={(event): void => {
-            update({ wspSubmitted: event.target.checked })
-          }}
-          type="checkbox"
-        />
-        Workplace Skills Plan (WSP) submitted to the SETA
-      </label>
-      <label className="grid gap-1">
-        <span className="text-sm font-medium">Skills development narrative (optional)</span>
-        <textarea
-          aria-label="Skills development narrative"
-          className="min-h-28 rounded border border-slate-300 px-3 py-2"
-          maxLength={NARRATIVE_MAX}
-          onChange={(event): void => {
-            update({ narrative: event.target.value })
-          }}
-          value={data.narrative}
-        />
-        <span className="text-xs text-slate-600">
-          {data.narrative.length} / {NARRATIVE_MAX}
-        </span>
-      </label>
+      {isLocked ? (
+        <>
+          <div className="grid gap-1">
+            <span className="text-sm font-medium">Workplace Skills Plan submitted</span>
+            <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              {data.wspSubmitted ? 'true' : 'false'}
+            </span>
+          </div>
+          <div className="grid gap-1">
+            <span className="text-sm font-medium">Skills development narrative (optional)</span>
+            <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              {data.narrative}
+            </span>
+          </div>
+        </>
+      ) : (
+        <>
+          <label className="flex items-center gap-2 text-sm font-medium">
+            <input
+              aria-label="WSP submitted to the SETA"
+              checked={data.wspSubmitted}
+              onChange={(event): void => {
+                update({ wspSubmitted: event.target.checked })
+              }}
+              type="checkbox"
+            />
+            Workplace Skills Plan (WSP) submitted to the SETA
+          </label>
+          <label className="grid gap-1">
+            <span className="text-sm font-medium">Skills development narrative (optional)</span>
+            <textarea
+              aria-label="Skills development narrative"
+              className="min-h-28 rounded border border-slate-300 px-3 py-2"
+              maxLength={NARRATIVE_MAX}
+              onChange={(event): void => {
+                update({ narrative: event.target.value })
+              }}
+              value={data.narrative}
+            />
+            <span className="text-xs text-slate-600">
+              {data.narrative.length} / {NARRATIVE_MAX}
+            </span>
+          </label>
+        </>
+      )}
     </section>
   )
 }

@@ -106,6 +106,25 @@ export async function requireAuth(request: FastifyRequest, reply: FastifyReply):
   request.user = payload
 }
 
+export const requireJwt = requireAuth
+
+export async function requireTenant(request: FastifyRequest, reply: FastifyReply): Promise<void> {
+  if (typeof request.user.tenantId !== 'string' || request.user.tenantId.length === 0) {
+    return reply.status(401).send({ error: 'Token missing tenantId claim' })
+  }
+}
+
+export function requireRole(
+  roles: string[],
+): (request: FastifyRequest, reply: FastifyReply) => Promise<void> {
+  const allowed = new Set(roles)
+  return async (request, reply) => {
+    if (!allowed.has(request.user.role)) {
+      return reply.status(403).send({ error: 'Insufficient role for this resource' })
+    }
+  }
+}
+
 // ─── Plugin ──────────────────────────────────────────────────────────────────
 
 function authPlugin(app: FastifyInstance): void {

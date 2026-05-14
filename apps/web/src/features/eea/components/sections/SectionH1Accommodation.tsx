@@ -92,7 +92,11 @@ function hasOverdueRequest(data: SectionH1AccommodationData): boolean {
   return false
 }
 
-export function SectionH1AccommodationStep({ wizardContext, updateWizardContext }: StepProps) {
+export function SectionH1AccommodationStep({
+  isLocked = false,
+  wizardContext,
+  updateWizardContext,
+}: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const stepKey = 'section-h-declaration'
   const data = getAccommodationData(formState[stepKey])
@@ -155,44 +159,56 @@ export function SectionH1AccommodationStep({ wizardContext, updateWizardContext 
                 <tr key={category}>
                   <th className="border border-slate-300 px-3 py-2 text-left">{label}</th>
                   <td className="border border-slate-300 px-3 py-2">
-                    <input
-                      aria-label={`${label} count`}
-                      className="w-24 rounded border border-slate-300 px-2 py-1"
-                      min={0}
-                      onChange={(event): void => {
-                        updateEntry(category, { count: Number(event.target.value) })
-                      }}
-                      type="number"
-                      value={entry.count}
-                    />
+                    {isLocked ? (
+                      <span>{entry.count}</span>
+                    ) : (
+                      <input
+                        aria-label={`${label} count`}
+                        className="w-24 rounded border border-slate-300 px-2 py-1"
+                        min={0}
+                        onChange={(event): void => {
+                          updateEntry(category, { count: Number(event.target.value) })
+                        }}
+                        type="number"
+                        value={entry.count}
+                      />
+                    )}
                   </td>
                   <td className="border border-slate-300 px-3 py-2">
-                    <select
-                      aria-label={`${label} status`}
-                      className="rounded border border-slate-300 px-2 py-1"
-                      onChange={(event): void => {
-                        const status = AccommodationStatusSchema.parse(event.target.value)
-                        updateEntry(category, { status })
-                      }}
-                      value={entry.status}
-                    >
-                      {AccommodationStatusSchema.options.map((option) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
+                    {isLocked ? (
+                      <span>{entry.status}</span>
+                    ) : (
+                      <select
+                        aria-label={`${label} status`}
+                        className="rounded border border-slate-300 px-2 py-1"
+                        onChange={(event): void => {
+                          const status = AccommodationStatusSchema.parse(event.target.value)
+                          updateEntry(category, { status })
+                        }}
+                        value={entry.status}
+                      >
+                        {AccommodationStatusSchema.options.map((option) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </td>
                   <td className="border border-slate-300 px-3 py-2">
-                    <input
-                      aria-label={`${label} created at`}
-                      className="rounded border border-slate-300 px-2 py-1"
-                      onChange={(event): void => {
-                        updateEntry(category, { createdAt: event.target.value })
-                      }}
-                      type="date"
-                      value={entry.createdAt}
-                    />
+                    {isLocked ? (
+                      <span>{entry.createdAt}</span>
+                    ) : (
+                      <input
+                        aria-label={`${label} created at`}
+                        className="rounded border border-slate-300 px-2 py-1"
+                        onChange={(event): void => {
+                          updateEntry(category, { createdAt: event.target.value })
+                        }}
+                        type="date"
+                        value={entry.createdAt}
+                      />
+                    )}
                   </td>
                 </tr>
               )

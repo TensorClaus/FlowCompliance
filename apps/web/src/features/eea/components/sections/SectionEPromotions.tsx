@@ -60,13 +60,45 @@ function getPromotionsData(value: unknown): SectionEPromotionsData {
   }
 }
 
-export function SectionEPromotionsStep(_props: StepProps) {
+export function SectionEPromotionsStep({ isLocked = false }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const stepKey = 'section-e-sector-targets'
   const data = getPromotionsData(formState[stepKey])
 
   const update = (patch: Partial<SectionEPromotionsData>): void => {
     setStepData(stepKey, { ...data, ...patch })
+  }
+
+  if (isLocked) {
+    return (
+      <section aria-label="Section E - Promotions" className="grid gap-4">
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-1">
+            <span className="text-sm font-medium">From level</span>
+            <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              {OCCUPATIONAL_LEVELS[data.fromLevel]}
+            </span>
+          </div>
+          <div className="grid gap-1">
+            <span className="text-sm font-medium">To level</span>
+            <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+              {OCCUPATIONAL_LEVELS[data.toLevel]}
+            </span>
+          </div>
+        </div>
+        <div className="grid gap-1">
+          <span className="text-sm font-medium">No promotions during this reporting period</span>
+          <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+            {data.noPromotions ? 'true' : 'false'}
+          </span>
+        </div>
+        <OccupationalMatrixComponent
+          data={data.matrix}
+          isDesignatedEmployer={false}
+          mode="locked"
+        />
+      </section>
+    )
   }
 
   return (

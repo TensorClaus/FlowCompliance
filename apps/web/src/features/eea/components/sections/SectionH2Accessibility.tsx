@@ -31,7 +31,7 @@ function isLastAssessmentStale(isoDate: string): boolean {
   return Date.now() - parsed > THREE_YEARS_MS
 }
 
-export function SectionH2AccessibilityStep(_props: StepProps) {
+export function SectionH2AccessibilityStep({ isLocked = false }: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const stepKey = 'section-h-hitl'
   const data = getAccessibilityData(formState[stepKey])
@@ -54,32 +54,51 @@ export function SectionH2AccessibilityStep(_props: StepProps) {
         </div>
       ) : null}
       <div className="grid gap-4 md:grid-cols-2">
-        <label className="grid gap-1">
-          <span className="text-sm font-medium">Last assessment date</span>
-          <input
-            aria-label="Last assessment date"
-            className="rounded border border-slate-300 px-3 py-2"
-            onChange={(event): void => {
-              update({ lastAssessmentDate: event.target.value })
-            }}
-            required
-            type="date"
-            value={data.lastAssessmentDate}
-          />
-        </label>
-        <label className="grid gap-1">
-          <span className="text-sm font-medium">Next scheduled date</span>
-          <input
-            aria-label="Next scheduled date"
-            className="rounded border border-slate-300 px-3 py-2"
-            onChange={(event): void => {
-              update({ nextScheduledDate: event.target.value })
-            }}
-            required
-            type="date"
-            value={data.nextScheduledDate}
-          />
-        </label>
+        {isLocked ? (
+          <>
+            <div className="grid gap-1">
+              <span className="text-sm font-medium">Last assessment date</span>
+              <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                {data.lastAssessmentDate}
+              </span>
+            </div>
+            <div className="grid gap-1">
+              <span className="text-sm font-medium">Next scheduled date</span>
+              <span className="rounded border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                {data.nextScheduledDate}
+              </span>
+            </div>
+          </>
+        ) : (
+          <>
+            <label className="grid gap-1">
+              <span className="text-sm font-medium">Last assessment date</span>
+              <input
+                aria-label="Last assessment date"
+                className="rounded border border-slate-300 px-3 py-2"
+                onChange={(event): void => {
+                  update({ lastAssessmentDate: event.target.value })
+                }}
+                required
+                type="date"
+                value={data.lastAssessmentDate}
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="text-sm font-medium">Next scheduled date</span>
+              <input
+                aria-label="Next scheduled date"
+                className="rounded border border-slate-300 px-3 py-2"
+                onChange={(event): void => {
+                  update({ nextScheduledDate: event.target.value })
+                }}
+                required
+                type="date"
+                value={data.nextScheduledDate}
+              />
+            </label>
+          </>
+        )}
       </div>
     </section>
   )

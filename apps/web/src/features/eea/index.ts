@@ -6,6 +6,11 @@ export {
 export { PercentageSliders, type PercentageSlidersProps } from './components/PercentageSliders'
 export { EEAWizard, UNSAVED_CHANGES_WARNING, type EEAWizardProps } from './components/eea-wizard'
 export {
+  EEA2SigningCeremonyPage,
+  type EEA2SignRequestInput,
+  type EEA2SigningCeremonyPageProps,
+} from './components/eea2-signing-ceremony'
+export {
   STEP_IDS,
   STEP_REGISTRY,
   SECTION_A_SCHEMA,

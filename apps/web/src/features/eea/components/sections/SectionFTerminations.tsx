@@ -120,7 +120,11 @@ function detectBarrierTrigger(data: SectionFTerminationsData): BarrierTrigger | 
   return null
 }
 
-export function SectionFTerminationsStep({ wizardContext, updateWizardContext }: StepProps) {
+export function SectionFTerminationsStep({
+  isLocked = false,
+  wizardContext,
+  updateWizardContext,
+}: StepProps) {
   const { formState, setStepData } = useWizardFormController()
   const stepKey = 'section-f-consultation'
   const data = getTerminationsData(formState[stepKey])
@@ -181,23 +185,27 @@ export function SectionFTerminationsStep({ wizardContext, updateWizardContext }:
                   {ROW_LABELS[rowKey]}
                 </th>
                 <td className="border border-slate-300 px-3 py-2">
-                  <select
-                    aria-label={`${ROW_LABELS[rowKey]} termination reason`}
-                    className="rounded border border-slate-300 px-2 py-1"
-                    onChange={(event): void => {
-                      const value = TerminationReasonSchema.parse(event.target.value)
-                      update({
-                        reasonsByRow: { ...data.reasonsByRow, [rowKey]: value },
-                      })
-                    }}
-                    value={data.reasonsByRow[rowKey] ?? 'resignation'}
-                  >
-                    {TerminationReasonSchema.options.map((reason) => (
-                      <option key={reason} value={reason}>
-                        {reason}
-                      </option>
-                    ))}
-                  </select>
+                  {isLocked ? (
+                    <span>{data.reasonsByRow[rowKey] ?? 'resignation'}</span>
+                  ) : (
+                    <select
+                      aria-label={`${ROW_LABELS[rowKey]} termination reason`}
+                      className="rounded border border-slate-300 px-2 py-1"
+                      onChange={(event): void => {
+                        const value = TerminationReasonSchema.parse(event.target.value)
+                        update({
+                          reasonsByRow: { ...data.reasonsByRow, [rowKey]: value },
+                        })
+                      }}
+                      value={data.reasonsByRow[rowKey] ?? 'resignation'}
+                    >
+                      {TerminationReasonSchema.options.map((reason) => (
+                        <option key={reason} value={reason}>
+                          {reason}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                 </td>
               </tr>
             ))}
@@ -207,7 +215,7 @@ export function SectionFTerminationsStep({ wizardContext, updateWizardContext }:
       <OccupationalMatrixComponent
         data={data.matrix}
         isDesignatedEmployer={false}
-        mode="edit"
+        mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {
           update({ matrix: updated })
         }}

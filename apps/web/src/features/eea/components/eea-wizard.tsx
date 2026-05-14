@@ -13,6 +13,7 @@ export interface EEAWizardProps {
   reportingYear?: number
   initialFormState?: Record<StepId, unknown>
   initialWizardContext?: WizardContext
+  isLocked?: boolean
   confirmNavigation?: (message: string) => boolean
   onComplete?: (values: Record<StepId, unknown>) => void
   patchDraftState?: (input: PatchDraftStateInput) => Promise<void>
@@ -46,6 +47,7 @@ export function EEAWizard({
   reportingYear = getCurrentYear(),
   initialFormState,
   initialWizardContext,
+  isLocked = false,
   confirmNavigation = defaultConfirmNavigation,
   onComplete,
   patchDraftState,
@@ -75,6 +77,11 @@ export function EEAWizard({
 
   const navigateToStep = (nextStep: StepId): void => {
     if (nextStep === wizard.currentStep) {
+      return
+    }
+
+    if (isLocked) {
+      wizard.goToStep(nextStep)
       return
     }
 
@@ -163,13 +170,16 @@ export function EEAWizard({
               </button>
             ))}
           </nav>
-          {isDirty ? <p className="text-sm text-amber-700">Unsaved changes</p> : null}
+          {isDirty && !isLocked ? <p className="text-sm text-amber-700">Unsaved changes</p> : null}
           {validationMessage ? <p className="text-sm text-red-700">{validationMessage}</p> : null}
         </header>
 
         {ActiveStep === undefined ? null : (
           <ActiveStep
             formId={formId}
+            completedSteps={wizard.completedSteps}
+            goToStep={wizard.goToStep}
+            isLocked={isLocked}
             onAdvance={(): void => {
               void advance()
             }}
@@ -178,25 +188,27 @@ export function EEAWizard({
           />
         )}
 
-        <footer className="flex items-center gap-2 border-t border-slate-200 pt-4">
-          <button
-            className="rounded border border-slate-300 px-3 py-2 text-sm font-medium"
-            onClick={back}
-            type="button"
-          >
-            Back
-          </button>
-          <button
-            className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
-            disabled={!wizard.canAdvance}
-            onClick={(): void => {
-              void advance()
-            }}
-            type="button"
-          >
-            {wizard.currentStep === 'review' ? 'Submit' : 'Next'}
-          </button>
-        </footer>
+        {isLocked ? null : (
+          <footer className="flex items-center gap-2 border-t border-slate-200 pt-4">
+            <button
+              className="rounded border border-slate-300 px-3 py-2 text-sm font-medium"
+              onClick={back}
+              type="button"
+            >
+              Back
+            </button>
+            <button
+              className="rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+              disabled={!wizard.canAdvance}
+              onClick={(): void => {
+                void advance()
+              }}
+              type="button"
+            >
+              {wizard.currentStep === 'review' ? 'Submit' : 'Next'}
+            </button>
+          </footer>
+        )}
       </section>
     </WizardFormContext.Provider>
   )
