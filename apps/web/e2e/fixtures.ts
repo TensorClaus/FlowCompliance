@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { test as base } from '@playwright/test'
 import type { Page, Route } from '@playwright/test'
+import { prisma } from '../../api/src/lib/prisma'
 
 const API_URL = process.env['PLAYWRIGHT_API_URL'] ?? 'http://localhost:3001'
 
@@ -40,43 +41,55 @@ async function installAuthInterceptor(page: Page, getToken: () => string): Promi
 }
 
 async function seedTenant(): Promise<Omit<SeedData, 'employeeADeclarationId'>> {
-  const res = await fetch(`${API_URL}/test/seed`, { method: 'POST' })
+  const res = await fetch(`${API_URL}/test/seed`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: '{}',
+  })
   if (!res.ok) throw new Error(`Seed failed: ${res.status.toString()}`)
   return (await res.json()) as Omit<SeedData, 'employeeADeclarationId'>
 }
 
-async function seedDeclaration(eeaManagerToken: string, eeaManagerSub: string): Promise<string> {
+async function seedDeclaration(tenantId: string, eeaManagerSub: string): Promise<string> {
   // 1×1 transparent PNG — minimal valid signature data URL.
   const minimalPng =
     'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
 
-  const res = await fetch(`${API_URL}/eea1`, {
-    method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      Authorization: `Bearer ${eeaManagerToken}`,
-    },
-    body: JSON.stringify({ employeeId: eeaManagerSub, signatureDataUrl: minimalPng }),
+  const declaration = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+    return tx.eea1Declaration.create({
+      data: {
+        tenantId,
+        employeeId: eeaManagerSub,
+        foreignNational: false,
+        name: 'EE Manager',
+        signatureDataUrl: minimalPng,
+        workplaceNumber: 'WP-EE-MANAGER',
+        declarationDate: new Date(),
+      },
+      select: { id: true },
+    })
   })
-  if (!res.ok) {
-    throw new Error(`Declaration seed failed: ${res.status.toString()}`)
-  }
-  const body = (await res.json()) as { id: string }
-  return body.id
+  return declaration.id
 }
 
 async function teardownTenant(tenantId: string): Promise<void> {
   await fetch(`${API_URL}/test/seed/${tenantId}`, { method: 'DELETE' })
 }
 
+export async function seedTenantWithDeclaration(): Promise<SeedData> {
+  const partial = await seedTenant()
+  const employeeADeclarationId = await seedDeclaration(partial.tenantId, partial.eeaManagerSub)
+  return { ...partial, employeeADeclarationId }
+}
+
+export async function teardownSeedTenant(tenantId: string): Promise<void> {
+  await teardownTenant(tenantId)
+}
+
 export const test = base.extend<{ setup: TestSetup }>({
   setup: async ({ page }, use) => {
-    const partial = await seedTenant()
-    const employeeADeclarationId = await seedDeclaration(
-      partial.eeaManagerToken,
-      partial.eeaManagerSub,
-    )
-    const seed: SeedData = { ...partial, employeeADeclarationId }
+    const seed = await seedTenantWithDeclaration()
 
     let currentToken = seed.eeaManagerToken
     await installAuthInterceptor(page, () => currentToken)

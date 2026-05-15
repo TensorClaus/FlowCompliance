@@ -22,6 +22,8 @@ export interface UseEEAAutosaveOptions {
   debounceMs?: number
   endpoint?: string
   request?: AutosaveRequest
+  retryOnFailure?: boolean
+  retryDelayMs?: number
 }
 
 export interface UseEEAAutosaveResult {
@@ -129,8 +131,17 @@ const buildValidationError = (event: unknown, reason: unknown): AppError =>
     reason,
   })
 
+interface RetryQueueItem {
+  event: EEAEvent
+  hash: string
+  key: string
+  resolvers: Array<(result: Result<AppendResult, AppError>) => void>
+}
+
 export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutosaveResult {
   const debounceMs = options.debounceMs ?? DEFAULT_DEBOUNCE_MS
+  const retryOnFailure = options.retryOnFailure ?? false
+  const retryDelayMs = options.retryDelayMs ?? 1000
   const request = useMemo<AutosaveRequest>(() => {
     if (options.request) {
       return options.request
@@ -149,6 +160,9 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
   const lastSuccessfulHashReference = useRef<string | null>(null)
   const lastResultReference = useRef<Result<AppendResult, AppError> | null>(null)
   const resolverReference = useRef<Array<(result: Result<AppendResult, AppError>) => void>>([])
+  const retryQueueReference = useRef<RetryQueueItem[]>([])
+  const retryTimerReference = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryInFlightReference = useRef<RetryQueueItem | null>(null)
 
   const resolvePending = useCallback((result: Result<AppendResult, AppError>): void => {
     const pendingResolvers = resolverReference.current
@@ -212,6 +226,69 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
     return result
   }, [request, resolvePending])
 
+  const runRetryQueue = useCallback(async (): Promise<Result<AppendResult, AppError> | null> => {
+    if (!retryOnFailure || retryInFlightReference.current !== null) {
+      return lastResultReference.current
+    }
+
+    const nextItem = retryQueueReference.current.shift()
+    if (nextItem === undefined) {
+      setIsSaving(false)
+      return lastResultReference.current
+    }
+
+    if (retryTimerReference.current !== null) {
+      clearTimeout(retryTimerReference.current)
+      retryTimerReference.current = null
+    }
+
+    const abortController = new AbortController()
+    abortControllerReference.current = abortController
+    retryInFlightReference.current = nextItem
+    inFlightHashReference.current = nextItem.hash
+    setIsSaving(true)
+
+    let result: Result<AppendResult, AppError>
+    try {
+      result = await request(nextItem.event, abortController.signal)
+    } catch (error) {
+      result = err(
+        new AppError(
+          'AUTOSAVE_UNHANDLED_REQUEST_ERROR',
+          'Autosave request failed with an unhandled error',
+          error,
+        ),
+      )
+    }
+
+    lastResultReference.current = result
+    setLastResult(result)
+    retryInFlightReference.current = null
+    abortControllerReference.current = null
+    inFlightHashReference.current = null
+
+    if (result.ok) {
+      lastSuccessfulHashReference.current = nextItem.hash
+      for (const resolve of nextItem.resolvers) {
+        resolve(result)
+      }
+      if (retryQueueReference.current.length > 0) {
+        void runRetryQueue()
+      } else {
+        setIsSaving(false)
+      }
+      return result
+    }
+
+    retryQueueReference.current.unshift(nextItem)
+    retryTimerReference.current = setTimeout((): void => {
+      retryTimerReference.current = null
+      void runRetryQueue()
+    }, retryDelayMs)
+    setIsSaving(true)
+    return result
+  }, [request, retryDelayMs, retryOnFailure])
+
   const autosave = useCallback(
     (event: EEAEvent): Promise<Result<AppendResult, AppError>> => {
       const parsedEvent = EEAEventSchema.safeParse(event)
@@ -226,6 +303,40 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
         lastResultReference.current.ok
       ) {
         return Promise.resolve(lastResultReference.current)
+      }
+
+      if (retryOnFailure) {
+        const queueKey = parsedEvent.data.fieldPath ?? eventHash
+        if (retryInFlightReference.current?.hash === eventHash) {
+          return new Promise((resolve): void => {
+            retryInFlightReference.current?.resolvers.push(resolve)
+          })
+        }
+
+        return new Promise((resolve): void => {
+          const queued = retryQueueReference.current.find((item) => item.key === queueKey)
+          if (queued === undefined) {
+            retryQueueReference.current.push({
+              event: parsedEvent.data,
+              hash: eventHash,
+              key: queueKey,
+              resolvers: [resolve],
+            })
+          } else {
+            queued.event = parsedEvent.data
+            queued.hash = eventHash
+            queued.resolvers.push(resolve)
+          }
+
+          setIsSaving(true)
+          if (timeoutReference.current !== null) {
+            clearTimeout(timeoutReference.current)
+          }
+          timeoutReference.current = setTimeout((): void => {
+            timeoutReference.current = null
+            void runRetryQueue()
+          }, debounceMs)
+        })
       }
 
       if (inFlightHashReference.current === eventHash) {
@@ -249,10 +360,22 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
         }, debounceMs)
       })
     },
-    [debounceMs, runSave],
+    [debounceMs, retryOnFailure, runRetryQueue, runSave],
   )
 
   const flush = useCallback(async (): Promise<Result<AppendResult, AppError> | null> => {
+    if (retryOnFailure) {
+      if (timeoutReference.current !== null) {
+        clearTimeout(timeoutReference.current)
+        timeoutReference.current = null
+      }
+      if (retryTimerReference.current !== null) {
+        clearTimeout(retryTimerReference.current)
+        retryTimerReference.current = null
+      }
+      return runRetryQueue()
+    }
+
     if (timeoutReference.current !== null) {
       clearTimeout(timeoutReference.current)
       timeoutReference.current = null
@@ -263,7 +386,7 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
     }
 
     return lastResultReference.current
-  }, [runSave])
+  }, [retryOnFailure, runRetryQueue, runSave])
 
   const cancel = useCallback((): void => {
     if (timeoutReference.current !== null) {
@@ -273,6 +396,10 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
 
     queuedEventReference.current = null
     queuedHashReference.current = null
+    if (retryTimerReference.current !== null) {
+      clearTimeout(retryTimerReference.current)
+      retryTimerReference.current = null
+    }
 
     if (abortControllerReference.current !== null) {
       abortControllerReference.current.abort()
@@ -281,6 +408,19 @@ export function useEEAAutosave(options: UseEEAAutosaveOptions = {}): UseEEAAutos
 
     const cancelledResult = err(new AppError('AUTOSAVE_CANCELLED', 'Autosave request cancelled'))
     resolvePending(cancelledResult)
+    for (const item of retryQueueReference.current) {
+      for (const resolve of item.resolvers) {
+        resolve(cancelledResult)
+      }
+    }
+    retryQueueReference.current = []
+    const retryInFlight = retryInFlightReference.current
+    if (retryInFlight !== null) {
+      for (const resolve of retryInFlight.resolvers) {
+        resolve(cancelledResult)
+      }
+    }
+    retryInFlightReference.current = null
     setIsSaving(false)
   }, [resolvePending])
 

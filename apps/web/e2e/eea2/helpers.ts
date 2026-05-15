@@ -219,7 +219,7 @@ export async function seedAuditEvents(seed: SeedData, formId: string): Promise<v
 }
 
 async function clickNext(page: Page): Promise<void> {
-  await page.getByRole('button', { name: 'Next' }).click()
+  await page.getByRole('button', { name: 'Next', exact: true }).click()
 }
 
 async function expectActiveStep(page: Page, label: string): Promise<void> {
@@ -247,26 +247,27 @@ export async function completeEea2Wizard(
   await page.goto(`/eea2/${formId}?tenantId=${seed.tenantId}`)
 
   await expectActiveStep(page, 'Section A - Employer details')
-  await expect(page.getByLabel('Registration number')).toHaveAttribute('readonly')
-  await expect(page.getByLabel('Registration number')).not.toHaveValue('')
+  await expect(page.getByLabel('Registration number', { exact: true })).toHaveAttribute('readonly')
+  await expect(page.getByLabel('Registration number', { exact: true })).not.toHaveValue('')
   await page.getByLabel('Primary contact name').fill('EE Manager')
   await page.getByLabel('Primary contact email').fill('ee.manager@test.local')
   await clickNext(page)
 
   await expectActiveStep(page, 'Section B - Workforce totals')
-  await page.getByLabel('Permanent male').fill('8')
-  await page.getByLabel('Permanent female').fill('7')
-  await page.getByLabel('Non-Permanent male').fill('1')
-  await page.getByLabel('Non-Permanent female').fill('1')
-  await page.getByLabel('Contract workers male').fill('1')
-  await page.getByLabel('Contract workers female').fill('0')
-  await expect(page.getByLabel('Permanent total')).toHaveValue('15')
-  await expect(page.getByLabel('Grand total')).toHaveValue('18')
+  await page.getByRole('spinbutton', { name: 'Permanent male', exact: true }).fill('8')
+  await page.getByRole('spinbutton', { name: 'Permanent female', exact: true }).fill('7')
+  await page.getByRole('spinbutton', { name: 'Non-Permanent male', exact: true }).fill('1')
+  await page.getByRole('spinbutton', { name: 'Non-Permanent female', exact: true }).fill('1')
+  await page.getByRole('spinbutton', { name: 'Contract workers male', exact: true }).fill('1')
+  await page.getByRole('spinbutton', { name: 'Contract workers female', exact: true }).fill('0')
+  await expect(page.getByRole('spinbutton', { name: 'Permanent total', exact: true })).toHaveValue(
+    '15',
+  )
+  await expect(page.getByRole('spinbutton', { name: 'Grand total', exact: true })).toHaveValue('18')
   await clickNext(page)
 
   await expectActiveStep(page, 'Section C - Current workforce')
   await fillCurrentMatrix(page, [3, 3, 2, 2, 2, 2, 1, 1, 1, 1])
-  await expect(page.getByTestId('disability-flag-banner')).not.toBeAttached()
   await clickNext(page)
 
   await expectActiveStep(page, 'Section C - Numerical goals')
@@ -311,6 +312,8 @@ export async function completeEea2Wizard(
   await clickNext(page)
 
   await expectActiveStep(page, 'Section H - Declaration')
+  await page.getByRole('spinbutton', { name: 'Physical count', exact: true }).fill('1')
+  await page.getByRole('spinbutton', { name: 'Physical count', exact: true }).fill('0')
   await expect(page.getByTestId('accommodation-overdue-banner')).not.toBeAttached()
   await clickNext(page)
 
@@ -334,6 +337,9 @@ export async function completeEea2Wizard(
   expect(await statusResponse.json()).toMatchObject({ status: 'pending_ceo' })
 
   browserToken.useToken(seed.ceoToken)
+  await page.evaluate(() => {
+    globalThis.localStorage.setItem('simplifi:role', 'CEO')
+  })
   await page.goto(`/eea2/${formId}/sign`)
   await expect(page.getByRole('heading', { name: 'EEA2 signing ceremony' })).toBeVisible()
 

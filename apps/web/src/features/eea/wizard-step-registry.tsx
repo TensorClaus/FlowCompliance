@@ -48,10 +48,9 @@ export const SECTION_A_SCHEMA = z.object({
   totalEmployeesPriorYear: z.number().int().min(0),
   primaryContactName: z.string().trim().min(1, 'Primary contact name is required'),
   primaryContactEmail: z
-    .string()
+    .email('Enter a valid primary contact email')
     .trim()
-    .min(1, 'Primary contact email is required')
-    .email('Enter a valid primary contact email'),
+    .min(1, 'Primary contact email is required'),
   reportingYear: z.number().int().min(2000).max(2100),
 })
 
@@ -91,7 +90,7 @@ export const SECTION_D_TRAINING_SPEND_SCHEMA = z.object({
   narrative: z.string().max(500).optional(),
 })
 
-const placeholderSchema = z.object({}).passthrough()
+const placeholderSchema = z.looseObject({})
 
 const emptySectionAReadOnly: SectionAReadOnlyFields = {
   registrationNumber: '',
@@ -532,8 +531,13 @@ export function SectionBStep({ isLocked = false }: StepProps) {
   )
 }
 
-export function SectionC1Step({ isLocked = false, wizardContext, updateWizardContext }: StepProps) {
-  const { formState, setStepData } = useWizardFormController()
+export function SectionC1Step({
+  formId,
+  isLocked = false,
+  wizardContext,
+  updateWizardContext,
+}: StepProps) {
+  const { tenantId, formState, setStepData } = useWizardFormController()
   const matrix = getOccupationalMatrix(formState['section-c1'])
   const actual = matrix.grandTotal.total.value
   const expected = wizardContext.sectionBTotals?.grandTotal ?? null
@@ -560,8 +564,18 @@ export function SectionC1Step({ isLocked = false, wizardContext, updateWizardCon
         <DisabilityFlagBanner headcount={0} percentage={0} total={Math.max(actual, 1)} />
       ) : null}
       <OccupationalMatrixComponent
+        autosaveOptions={{
+          endpoint: `/api/eea2/${encodeURIComponent(formId)}/events`,
+          retryOnFailure: true,
+        }}
         data={matrix}
         disabilityHeadcount={0}
+        eventContext={{
+          tenantId,
+          formId,
+          triggeredBy: 'browser-session',
+          sessionId: formId,
+        }}
         isDesignatedEmployer={false}
         mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {

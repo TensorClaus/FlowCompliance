@@ -1,6 +1,8 @@
+import { EEAEventSchema } from '@simplifi/shared'
 import { PII_FIELD_PATHS } from '@simplifi/shared/eea/pii-fields'
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import { z } from 'zod'
+import { EventEmitter } from '../../event-store/emitter.js'
 import { replayTo } from '../../event-store/replay.js'
 import { prisma } from '../../lib/prisma.js'
 import { requireAuth } from '../../plugins/auth.js'
@@ -78,8 +80,8 @@ function requireRole(
 
 const eventsQuerySchema = z.object({
   section: z.string().optional(),
-  from: z.string().datetime({ offset: true }).optional(),
-  to: z.string().datetime({ offset: true }).optional(),
+  from: z.iso.datetime({ offset: true }).optional(),
+  to: z.iso.datetime({ offset: true }).optional(),
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(50),
 })
@@ -102,6 +104,51 @@ const ALLOWED_ROLES: AllowedRole[] = [
 // ---------------------------------------------------------------------------
 
 export function eea2EventsRoutes(app: FastifyInstance): void {
+  // eslint-disable-next-line unicorn/prefer-event-target -- This is the event-store append service, not a DOM event target.
+  const emitter = new EventEmitter()
+
+  app.post<{ Params: { formId: string }; Body: unknown }>(
+    '/eea2/:formId/events',
+    {
+      preHandler: [requireAuth, requireRole(ALLOWED_ROLES)],
+    },
+    async (request, reply) => {
+      const { formId } = request.params
+      const tenantId = request.user.tenantId
+      const body =
+        typeof request.body === 'object' && request.body !== null
+          ? (request.body as Record<string, unknown>)
+          : {}
+      const event = {
+        ...body,
+        tenantId,
+        formId,
+        metadata: {
+          ...(typeof body['metadata'] === 'object' && body['metadata'] !== null
+            ? (body['metadata'] as Record<string, unknown>)
+            : {}),
+          triggeredBy: request.user.sub,
+          ip: request.ip,
+          userAgent: request.headers['user-agent'] ?? 'unknown',
+          sessionId: request.user.jti,
+        },
+        timestamp: new Date(),
+      }
+
+      const parsed = EEAEventSchema.safeParse(event)
+      if (!parsed.success) {
+        return reply.status(400).send({ error: 'Invalid event body' })
+      }
+
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+        return emitter.append(parsed.data, tx)
+      })
+
+      return reply.status(201).send(result)
+    },
+  )
+
   /**
    * GET /eea2/:formId/events
    *

@@ -154,7 +154,7 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
     },
     ref,
   ) {
-    const { autosave } = useEEAAutosave(autosaveOptions ?? {})
+    const { autosave, isSaving } = useEEAAutosave(autosaveOptions ?? {})
 
     // Track value at focus time so the autosave event captures the correct previousValue
     const prevValueOnFocus = useRef<Record<string, number>>({})
@@ -316,6 +316,14 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
         className={clsx('overflow-x-auto', isDisabled && 'pointer-events-none opacity-75')}
         data-testid="occupational-matrix"
       >
+        {isSaving ? (
+          <span
+            className="block pb-2 text-xs font-medium text-amber-700"
+            data-testid="save-pending"
+          >
+            Saving
+          </span>
+        ) : null}
         {disabilityFlagActive && (
           <DisabilityFlagBanner
             headcount={disabilityHeadcount}

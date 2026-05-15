@@ -149,7 +149,8 @@ export function EEA2SigningCeremonyPage({
         <label className="flex items-start gap-3 text-sm text-slate-800">
           <input
             checked={confirmationChecked}
-            className="mt-1"
+            className="h-11 w-11 shrink-0"
+            data-testid="declaration-checkbox"
             onChange={(event): void => {
               setConfirmationChecked(event.target.checked)
             }}
