@@ -130,7 +130,7 @@ describe('EEA1 form sections', () => {
     vi.useFakeTimers()
     const patchBodies: Array<Record<string, unknown>> = []
     const originalFetch = globalThis.fetch
-    globalThis.fetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
       let normalizedInit: RequestInit | undefined
       if (init !== undefined) {
         const { signal, ...rest } = init
@@ -141,7 +141,7 @@ describe('EEA1 form sections', () => {
         return originalFetch(new URL(input, globalThis.location.origin).toString(), normalizedInit)
       }
       return originalFetch(input, normalizedInit)
-    }
+    })
 
     server.use(
       http.patch('/eea1/:formId', async ({ request }) => {
@@ -178,7 +178,7 @@ describe('EEA1 form sections', () => {
       expect(patchBodies).toHaveLength(1)
       expect(patchBodies.some((body) => Object.hasOwn(body, 'race'))).toBe(false)
     } finally {
-      globalThis.fetch = originalFetch
+      vi.unstubAllGlobals()
     }
   })
 })

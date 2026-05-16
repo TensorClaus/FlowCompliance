@@ -6,7 +6,7 @@
  * 2. Adding request/response serializers that recursively strip PII from
  *    logged HTTP bodies (catches nested and dynamic field names).
  */
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 
 // ---------------------------------------------------------------------------
@@ -161,7 +161,7 @@ function responseSerializer(res: FastifyReply): SerializedResponse {
 // Plugin
 // ---------------------------------------------------------------------------
 
-function logScrubberPlugin(fastify: FastifyInstance): void {
+const logScrubberPlugin: FastifyPluginCallback = (fastify, _options, done) => {
   // Attach custom serializers to the existing logger instance.
   // Pino allows rebinding child loggers with additional serializers.
   const child = fastify.log.child(
@@ -190,6 +190,7 @@ function logScrubberPlugin(fastify: FastifyInstance): void {
 
     return payload
   })
+  done()
 
   fastify.log.info('Log scrubber registered — POPIA s.19 PII redaction active')
 }

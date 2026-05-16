@@ -45,14 +45,30 @@ export async function buildApp(): Promise<FastifyInstance> {
   // are reachable without a pre-existing Bearer token. The tenant-context plugin
   // only skips /health explicitly; auth routes issue the token that all other
   // routes then require.
-  await app.register(authRoutes)
-  await app.register(totpRoutes)
-  await app.register(employerRoutes)
-  await app.register(eea1Routes)
-  await app.register(eea1DeclarationsRoutes)
-  await app.register(eea2Routes)
-  await app.register(eea2EventsRoutes)
-  await app.register(eventStoreRoutes)
+  await app.register((instance) => {
+    authRoutes(instance)
+  })
+  await app.register((instance) => {
+    totpRoutes(instance)
+  })
+  await app.register((instance) => {
+    employerRoutes(instance)
+  })
+  await app.register((instance) => {
+    eea1Routes(instance)
+  })
+  await app.register((instance) => {
+    eea1DeclarationsRoutes(instance)
+  })
+  await app.register((instance) => {
+    eea2Routes(instance)
+  })
+  await app.register((instance) => {
+    eea2EventsRoutes(instance)
+  })
+  await app.register((instance) => {
+    eventStoreRoutes(instance)
+  })
 
   // Tenant context — enforces JWT auth + sets RLS GUC for all non-public routes.
   // The plugin's onRequest hook skips /health; add further public paths there as needed.
@@ -67,7 +83,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // E2E suites. Never registered in production or staging environments.
   if (config.NODE_ENV === 'test') {
     const { testSeedRoutes } = await import('./routes/test-seed.routes.js')
-    await app.register(testSeedRoutes)
+    await app.register((instance) => {
+      testSeedRoutes(instance)
+    })
   }
 
   return app

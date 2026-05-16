@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest } from 'fastify'
+import type { FastifyPluginCallback, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import jwt from 'jsonwebtoken'
 import { config } from '../config.js'
@@ -38,7 +38,7 @@ function isPublicRoute(url: string): boolean {
   return PUBLIC_PREFIXES.some((prefix) => pathname.startsWith(prefix))
 }
 
-function tenantContextPlugin(app: FastifyInstance) {
+const tenantContextPlugin: FastifyPluginCallback = (app, _options, done) => {
   app.addHook('onRequest', async (request, reply) => {
     if (isPublicRoute(request.url)) {
       return
@@ -77,6 +77,7 @@ function tenantContextPlugin(app: FastifyInstance) {
     // to guarantee SET LOCAL is in scope for every statement.
     await prisma.$executeRawUnsafe(`SET LOCAL app.tenant_id = '${tenantId}'`)
   })
+  done()
 }
 
 export default fp(tenantContextPlugin, {

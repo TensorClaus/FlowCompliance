@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify'
+import type { FastifyPluginCallback, FastifyReply, FastifyRequest } from 'fastify'
 import fp from 'fastify-plugin'
 import jwt from 'jsonwebtoken'
 import { config } from '../config.js'
@@ -133,7 +133,7 @@ export function requireRole(
 
 // ─── Plugin ──────────────────────────────────────────────────────────────────
 
-function authPlugin(app: FastifyInstance): void {
+const authPlugin: FastifyPluginCallback = (app, _options, done) => {
   /**
    * Global preHandler that runs after tenant-context's onRequest hook.
    * Public routes (/health, /auth/*) are skipped so that the login and
@@ -146,6 +146,7 @@ function authPlugin(app: FastifyInstance): void {
 
     return requireAuth(request, reply)
   })
+  done()
 }
 
 export default fp(authPlugin, {
