@@ -29,6 +29,11 @@ export interface CompletedEea2Wizard {
   ceoName: string
 }
 
+export interface SignedEea2Form {
+  formId: string
+  tenantId: string
+}
+
 const STEP_LABELS = [
   'Section A - Employer details',
   'Section B - Workforce totals',
@@ -134,6 +139,20 @@ export async function createEea2Draft(seed: SeedData): Promise<string> {
   return body.id
 }
 
+export async function createSignedEea2Form(seed: SeedData): Promise<SignedEea2Form> {
+  const response = await fetch(`${API_URL}/test/seed/eea2-signed`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ tenantId: seed.tenantId }),
+  })
+
+  if (!response.ok) {
+    throw new Error(`Signed EEA2 seed failed: ${response.status.toString()}`)
+  }
+
+  return (await response.json()) as SignedEea2Form
+}
+
 export async function installEea2ApiRoutes(page: Page, getToken: () => string): Promise<void> {
   await page.route('**/api/eea2/**', async (route: Route) => {
     const request = route.request()
@@ -148,6 +167,25 @@ export async function installEea2ApiRoutes(page: Page, getToken: () => string): 
       },
     })
   })
+
+  await page.route(
+    (url) => {
+      const pathname = new URL(url).pathname
+      return /^\/eea2\/[^/]+\/(?:events|replay)$/.test(pathname)
+    },
+    async (route: Route) => {
+      const request = route.request()
+      const sourceUrl = new URL(request.url())
+      const targetUrl = `${API_URL}${sourceUrl.pathname}${sourceUrl.search}`
+      await route.continue({
+        url: targetUrl,
+        headers: {
+          ...request.headers(),
+          Authorization: `Bearer ${getToken()}`,
+        },
+      })
+    },
+  )
 
   await page.route('**/api/eea2/prefill**', async (route: Route) => {
     await route.fulfill({

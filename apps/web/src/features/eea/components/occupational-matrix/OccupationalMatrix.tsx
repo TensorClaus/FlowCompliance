@@ -423,7 +423,7 @@ export const OccupationalMatrix = forwardRef<OccupationalMatrixHandle, Occupatio
                             value={cell.value}
                           />
                         ) : (
-                          <span>{cell.value}</span>
+                          <span data-testid="matrix-cell">{cell.value}</span>
                         )}
                       </td>
                     )

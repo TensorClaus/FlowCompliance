@@ -854,7 +854,12 @@ function ReviewStep({
   return (
     <section aria-label="Review and submit" className="grid gap-4">
       {wizardContext.disabilityFlagActive ? (
-        <DisabilityFlagBanner headcount={0} percentage={0} total={1} />
+        <DisabilityFlagBanner
+          headcount={0}
+          percentage={0}
+          testId="review-disability-flag"
+          total={1}
+        />
       ) : null}
       {wizardContext.barrierTerminationFlag ? <BarrierTerminationBanner /> : null}
       {wizardContext.accommodationOverdueFlag ? <AccommodationOverdueBanner /> : null}
@@ -888,6 +893,7 @@ function ReviewStep({
           {submitError ? <p className="text-sm text-red-700">{submitError}</p> : null}
           <button
             className="w-fit rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:bg-slate-300"
+            data-testid="submit-for-ceo-signing"
             disabled={isSubmitDisabled}
             onClick={(): void => {
               void submitForSigning()

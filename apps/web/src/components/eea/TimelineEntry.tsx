@@ -46,6 +46,9 @@ export function TimelineEntry({
       className="flex items-start justify-between gap-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm"
       data-testid={`timeline-entry-${eventId}`}
     >
+      <span className="sr-only" data-testid="timeline-entry">
+        Audit timeline entry
+      </span>
       <div className="flex flex-col gap-0.5 min-w-0">
         <span className="font-medium text-slate-900">{eventType}</span>
         {fieldPath !== null && (

@@ -4,14 +4,20 @@ export interface DisabilityFlagBannerProps {
   percentage: number
   headcount: number
   total: number
+  testId?: string
 }
 
-export function DisabilityFlagBanner({ percentage, headcount, total }: DisabilityFlagBannerProps) {
+export function DisabilityFlagBanner({
+  percentage,
+  headcount,
+  total,
+  testId = 'disability-flag-banner',
+}: DisabilityFlagBannerProps) {
   return (
     <div
       aria-live="assertive"
       className="mb-3 rounded border border-red-300 bg-red-50 px-4 py-3 text-sm text-red-800"
-      data-testid="disability-flag-banner"
+      data-testid={testId}
       role="alert"
     >
       <strong>Disability representation below 3% threshold</strong>

@@ -12,6 +12,10 @@ export interface SeedData {
   employeeBToken: string
   employeeBSub: string
   ceoToken: string
+  hrDirectorToken: string
+  cfoToken: string
+  seniorManagerToken: string
+  adminToken: string
   /** Pre-seeded EEA1 declaration for eeaManager — used by cross-employee access tests. */
   employeeADeclarationId: string
 }
