@@ -72,14 +72,14 @@ export type SectionE = z.infer<typeof SectionESchema>
  */
 export const EEA4ReportSchema = z.object({
   /** Tenant (employer) identifier — scopes the report to a single organisation */
-  tenantId: z.string().uuid(),
+  tenantId: z.uuid(),
 
   /**
    * UUID of the EEA2 report this EEA4 is linked to.
    * Both documents MUST share the same reporting period; the headcount in
    * sectionC is pre-filled (read-only) from EEA2 Table 1.1.
    */
-  linkedEEA2Id: z.string().uuid(),
+  linkedEEA2Id: z.uuid(),
 
   /**
    * Section A — Employer profile.
@@ -140,7 +140,7 @@ export type EEA4Report = z.infer<typeof EEA4ReportSchema>
  */
 export const EEA4FormSchema = z.object({
   /** Unique identifier for this EEA4 form record */
-  id: z.string().uuid(),
+  id: z.uuid(),
 
   /** The EEA4 report payload */
   report: EEA4ReportSchema,

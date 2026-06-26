@@ -56,7 +56,7 @@ export type NotificationType = z.infer<typeof NotificationTypeEnum>
  */
 export const SupportingDocumentSchema = z.object({
   /** Unique document identifier (UUID). */
-  documentId: z.string().uuid(),
+  documentId: z.uuid(),
 
   /** Original file name as supplied by the uploader. */
   fileName: z.string().min(1),
@@ -72,7 +72,7 @@ export const SupportingDocumentSchema = z.object({
   mimeType: z.enum(['application/pdf', 'image/png', 'image/jpeg']),
 
   /** ISO 8601 datetime at which the file was uploaded to S3. */
-  uploadedAt: z.string().datetime(),
+  uploadedAt: z.iso.datetime(),
 
   /** Optional plain-language description of the document's relevance. */
   description: z.string().min(1).optional(),
@@ -142,7 +142,7 @@ export type DGNotification = z.infer<typeof DGNotificationSchema>
 export const EEA14Schema = z
   .object({
     /** Employer (tenant) UUID — references the EmployerProfile record. */
-    employerId: z.string().uuid(),
+    employerId: z.uuid(),
 
     /** The DG notification body (Section A + Section B notification docs). */
     notification: DGNotificationSchema,
@@ -162,7 +162,7 @@ export const EEA14Schema = z
     ceoDeclaration: CEODeclarationSchema,
 
     /** ISO 8601 datetime at which this return was submitted to the DEL portal. */
-    submittedAt: z.string().datetime(),
+    submittedAt: z.iso.datetime(),
   })
   .refine(
     (data) =>

@@ -64,13 +64,13 @@ export const EmployerProfileSchema = z.object({
   /** CEO contact telephone number */
   ceoTelephone: z.string(),
   /** CEO contact email address */
-  ceoEmail: z.string().email(),
+  ceoEmail: z.email(),
   /** Senior manager or HR contact name */
   seniorManagerName: z.string(),
   /** Senior manager contact telephone number */
   seniorManagerTelephone: z.string(),
   /** Senior manager contact email address */
-  seniorManagerEmail: z.string().email(),
+  seniorManagerEmail: z.email(),
   /** Business entity type classification */
   businessType: BusinessTypeSchema,
   /** Whether the employer is an organ of state */
