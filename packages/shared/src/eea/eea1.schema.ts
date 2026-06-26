@@ -12,7 +12,7 @@ import { z } from 'zod'
  */
 export const EEA1DeclarationBaseSchema = z.object({
   /** UUID that identifies the employee record — pre-filled from the JWT. */
-  employeeId: z.string().uuid(),
+  employeeId: z.uuid(),
 
   /** Full name as it appears on the employee's ID document. */
   name: z.string().min(2).max(100),
@@ -36,7 +36,7 @@ export const EEA1DeclarationBaseSchema = z.object({
    * was granted. Stored as a date string (yyyy-mm-dd).
    * Conditional: required when foreignNational is true.
    */
-  citizenshipDate: z.string().date().optional(),
+  citizenshipDate: z.iso.date().optional(),
 })
 
 /**
@@ -54,7 +54,7 @@ export const EEA1DeclarationBaseSchema = z.object({
 export const EEA1DeclarationSchema = EEA1DeclarationBaseSchema.superRefine((data, ctx) => {
   if (data.foreignNational && !data.citizenshipDate) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['citizenshipDate'],
       message: 'Citizenship/permanent residence date is required for foreign nationals',
     })

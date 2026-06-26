@@ -185,12 +185,12 @@ export type EEA12ReportingPeriod = z.infer<typeof EEA12ReportingPeriodSchema>
  * CEO declaration (re-used from common.ts) and submission timestamp.
  */
 export const EEA12Schema = z.object({
-  employerId: z.string().uuid(),
+  employerId: z.uuid(),
   reportingPeriod: EEA12ReportingPeriodSchema,
   barriers: BarriersAnalysisSchema,
   workforceProfile: WorkforceProfileSchema,
   eapComparison: EapComparisonSchema,
   ceoDeclaration: CEODeclarationSchema,
-  submittedAt: z.string().datetime(),
+  submittedAt: z.iso.datetime(),
 })
 export type EEA12 = z.infer<typeof EEA12Schema>

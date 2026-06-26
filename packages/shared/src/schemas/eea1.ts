@@ -123,7 +123,7 @@ export type EmployeeDeclaration = z.infer<typeof EmployeeDeclarationSchema>
  */
 export const EEA1FormSchema = z.object({
   /** Unique record identifier (UUID). */
-  id: z.string().uuid(),
+  id: z.uuid(),
 
   /** The employee's completed self-declaration. */
   declaration: EmployeeDeclarationSchema,

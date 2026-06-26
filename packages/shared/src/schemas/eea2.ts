@@ -356,7 +356,7 @@ export type SectionH = z.infer<typeof SectionHSchema>
  */
 export const EEA2ReportSchema = z.object({
   /** Tenant identifier linking the report to the registered employer */
-  tenantId: z.string().uuid(),
+  tenantId: z.uuid(),
   /** Calendar year for which this report is submitted (e.g. 2025) */
   reportingYear: z.number().int().min(2000).max(2100),
   /**
@@ -432,7 +432,7 @@ export type EEA2Report = z.infer<typeof EEA2ReportSchema>
  */
 export const EEA2FormSchema = z.object({
   /** System-generated unique identifier for the persisted form document */
-  id: z.string().uuid(),
+  id: z.uuid(),
   /** The complete EEA2 annual report payload */
   report: EEA2ReportSchema,
   /**
