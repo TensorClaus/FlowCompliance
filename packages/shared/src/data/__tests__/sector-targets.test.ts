@@ -64,10 +64,8 @@ describe('GN6124_VERSION', () => {
 // ---------------------------------------------------------------------------
 
 describe('SECTOR_TARGETS', () => {
-  it('is an array (Wave 2 transcription populates entries)', () => {
-    // TODO(Wave 2): tighten to `toHaveLength(18)` once all sectors are
-    // transcribed from the gazette. Left as a shape-only check for now.
-    expect(Array.isArray(SECTOR_TARGETS)).toBe(true)
+  it('has one entry per sector code (18 entries)', () => {
+    expect(SECTOR_TARGETS).toHaveLength(18)
   })
 
   it('each entry (if any) has a sectorCode matching one of SECTOR_CODES', () => {
@@ -141,11 +139,13 @@ describe('OCCUPATIONAL_LEVEL_LABELS', () => {
 // ---------------------------------------------------------------------------
 
 describe('getSectorTarget', () => {
-  it('returns undefined for any code while SECTOR_TARGETS is empty', () => {
-    // TODO(Wave 2): once transcription lands, assert a populated sector
-    // resolves to its full target profile.
+  it('returns the SectorTarget for a populated gazetted sector code', () => {
+    // SECTOR_TARGETS is now populated (Wave 2 transcription complete), so a
+    // valid gazetted sector code resolves to its full target profile.
     const result = getSectorTarget('mining_quarrying')
-    expect(result).toBeUndefined()
+    expect(result).toBeDefined()
+    expect(result?.sectorCode).toBe('mining_quarrying')
+    expect(result?.sectorName).toBe('Mining and Quarrying')
   })
 
   it('returns undefined for an invalid code', () => {
@@ -160,14 +160,12 @@ describe('getSectorTarget', () => {
 // ---------------------------------------------------------------------------
 
 describe('getSectorTargetByLevel', () => {
-  it('returns undefined for any sector/level while SECTOR_TARGETS is empty', () => {
-    // TODO(Wave 2): once transcription lands, assert a populated
-    // sector/level pair resolves to its SectorTargetLevel, and add >= 3
-    // verbatim spot-check tests asserting exact gazetted values (toBe, not
-    // range) with the specific gazette citation in each test body — range/
-    // count invariants alone can't catch content errors.
+  it('returns the SectorTargetLevel for a populated sector and level', () => {
+    // SECTOR_TARGETS is now populated (Wave 2 transcription complete). See
+    // the "gazetted value spot-checks" describe block below for exact
+    // verbatim value assertions with in-test gazette citations.
     const result = getSectorTargetByLevel('finance_insurance', 'top_management')
-    expect(result).toBeUndefined()
+    expect(result).toBeDefined()
   })
 
   it('returns undefined for an invalid sector code', () => {
@@ -176,5 +174,62 @@ describe('getSectorTargetByLevel', () => {
       'top_management' as TargetOccupationalLevel,
     )
     expect(result).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// SECTOR_TARGETS — gazetted value spot-checks
+// ---------------------------------------------------------------------------
+//
+// Per 01-RESEARCH.md "Common Pitfall #4": range/count invariants alone can't
+// catch content errors — a fabricated in-range value would pass every test
+// above. These spot-checks assert exact, verbatim gazetted values (toBe, not
+// range) with the specific gazette citation in each test body, so a wrong
+// transcription fails loudly.
+//
+// All 5 assertions below were visually verified against the rendered PDF
+// table for both the primary source (gov.za) and the DEL mirror
+// (ee.labour.gov.za) — see 01-02-SUMMARY.md for the full verification
+// record, including a documented correction of 01-RESEARCH.md's own
+// gender-mislabeled "pre-verified" values (18.6/30.0/27.6 are the gazette's
+// Top Management MALE targets for these three sectors, not Female).
+
+describe('SECTOR_TARGETS — gazetted value spot-checks', () => {
+  it('matches GN 6124 gazetted value for Accommodation and Food Service — Top Management, Male', () => {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, "5-Year Sectoral
+    // Numerical Targets for All Sectors" table, p.6 — Accommodation and Food
+    // Service Activities column, Top management / Male row.
+    const result = getSectorTargetByLevel('accommodation_food_service', 'top_management')
+    expect(result?.designatedGroupMale).toBe(18.6)
+  })
+
+  it('matches GN 6124 gazetted value for Construction — Top Management, Male', () => {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.7 —
+    // Construction column, Top management / Male row.
+    const result = getSectorTarget('construction')
+    expect(result?.targets.top_management.designatedGroupMale).toBe(30)
+  })
+
+  it('matches GN 6124 gazetted value for Human Health and Social Work Activities — Top Management, Male', () => {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.8 — Human
+    // Health and Social Work Activities column, Top management / Male row.
+    const result = getSectorTarget('health_social_work')
+    expect(result?.targets.top_management.designatedGroupMale).toBe(27.6)
+  })
+
+  it('matches GN 6124 gazetted disability target for Accommodation and Food Service Activities', () => {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.6 —
+    // Accommodation and Food Service Activities column, "Disability only |
+    // All" row.
+    const result = getSectorTarget('accommodation_food_service')
+    expect(result?.disabilityTarget).toBe(3)
+  })
+
+  it('matches GN 6124 gazetted disability target for Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles', () => {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.10 —
+    // Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles
+    // column, "Disability only | All" row.
+    const result = getSectorTarget('wholesale_retail_trade')
+    expect(result?.disabilityTarget).toBe(3)
   })
 })

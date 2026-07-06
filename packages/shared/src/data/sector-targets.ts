@@ -168,18 +168,395 @@ export const OCCUPATIONAL_LEVEL_LABELS: Readonly<Record<OccupationalLevel, strin
 // ---------------------------------------------------------------------------
 
 /**
- * Complete sector target dataset for GN 6124. Each entry is transcribed
- * verbatim from the gazette's "1. 5-Year Sectoral Numerical Targets for All
- * Sectors" table (Gazette No. 52514, 15 April 2025), with a per-cell source
- * citation, following visual verification against the rendered PDF (not
- * `pdftotext` linear output, which interleaves the Male/Female/Total
- * sub-rows unreliably across columns).
+ * Complete sector target dataset for GN 6124, transcribed from the gazette's
+ * "1. 5-Year Sectoral Numerical Targets for All Sectors" table (Gazette No.
+ * 52514, 15 April 2025, pages 6-10).
  *
- * TODO(Wave 2): populate all 18 sector entries with gazetted values. Left
- * empty here — no statutory values are transcribed in the shape-redesign
- * commit; this array holds the shape only until transcription lands.
+ * Every value below was visually verified against the rendered PDF table for
+ * BOTH the primary source (gov.za) and the DEL mirror (ee.labour.gov.za) —
+ * not read from `pdftotext` linear output, which interleaves the Male/
+ * Female/Total sub-rows unreliably across columns (see 01-RESEARCH.md
+ * "Common Pitfall #2"). Both sources render byte-identical table content.
+ *
+ * DISCREPANCY NOTE vs 01-RESEARCH.md's "Extracted sample values" table: that
+ * table's 5 pre-verified values misattributed 3 gender labels — the values
+ * 18.6 (Accommodation), 30.0 (Construction), and 27.6 (Human Health) are the
+ * gazette's Top Management **Male** targets, not Female, for those sectors
+ * (the two disability values, both 3%, were correctly labeled). This was a
+ * `pdftotext` linear-extraction artifact in the research phase, not a
+ * disagreement between the two source PDFs — both sources independently and
+ * unambiguously render "Male" then "Female" then "Total" as the sub-row
+ * order beneath each occupational level, confirmed by direct visual
+ * rendering of the table (not text extraction) for every one of the 18
+ * sectors below. See 01-02-SUMMARY.md for the full resolution record.
+ *
+ * No cell in this table was ambiguous, blurred, or unreadable on visual
+ * inspection — every cell for every sector was legibly rendered in both
+ * sources, so there are zero UNVERIFIED cells in this transcription.
  */
-export const SECTOR_TARGETS: readonly SectorTarget[] = []
+export const SECTOR_TARGETS: readonly SectorTarget[] = [
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, "5-Year Sectoral
+    // Numerical Targets for All Sectors" table, p.6, column 1.
+    sectorCode: 'accommodation_food_service',
+    sectorName: 'Accommodation and Food Service Activities',
+    targets: {
+      // Gazette p.6, Accommodation and Food Service Activities, Top management row.
+      top_management: { designatedGroupMale: 18.6, designatedGroupFemale: 38.1 },
+      // Gazette p.6, Accommodation and Food Service Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 32.2, designatedGroupFemale: 46.1 },
+      // Gazette p.6, Accommodation and Food Service Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 38.6,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.6, Accommodation and Food Service Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.6, Accommodation and Food Service Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.6, column 2.
+    sectorCode: 'administrative_support',
+    sectorName: 'Administrative and Support Activities',
+    targets: {
+      // Gazette p.6, Administrative and Support Activities, Top management row.
+      top_management: { designatedGroupMale: 33.2, designatedGroupFemale: 36.7 },
+      // Gazette p.6, Administrative and Support Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 42.3, designatedGroupFemale: 43.5 },
+      // Gazette p.6, Administrative and Support Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 49.2,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.6, Administrative and Support Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.6, Administrative and Support Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.6, column 3.
+    sectorCode: 'agriculture_forestry_fishing',
+    sectorName: 'Agriculture, Forestry & Fishing',
+    targets: {
+      // Gazette p.6, Agriculture, Forestry & Fishing, Top management row.
+      top_management: { designatedGroupMale: 13.2, designatedGroupFemale: 20.8 },
+      // Gazette p.6, Agriculture, Forestry & Fishing, Senior Management row.
+      senior_management: { designatedGroupMale: 21.6, designatedGroupFemale: 31 },
+      // Gazette p.6, Agriculture, Forestry & Fishing, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 34.7,
+        designatedGroupFemale: 41.7,
+      },
+      // Gazette p.6, Agriculture, Forestry & Fishing, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 44 },
+    },
+    // Gazette p.6, Agriculture, Forestry & Fishing, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.6, column 4.
+    sectorCode: 'arts_entertainment_recreation',
+    sectorName: 'Arts, Entertainment and Recreation',
+    targets: {
+      // Gazette p.6, Arts, Entertainment and Recreation, Top management row.
+      top_management: { designatedGroupMale: 35.1, designatedGroupFemale: 33.5 },
+      // Gazette p.6, Arts, Entertainment and Recreation, Senior Management row.
+      senior_management: { designatedGroupMale: 40.3, designatedGroupFemale: 43.8 },
+      // Gazette p.6, Arts, Entertainment and Recreation, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 49.8,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.6, Arts, Entertainment and Recreation, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.6, Arts, Entertainment and Recreation, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.7, column 1.
+    sectorCode: 'construction',
+    sectorName: 'Construction',
+    targets: {
+      // Gazette p.7, Construction, Top management row.
+      top_management: { designatedGroupMale: 30, designatedGroupFemale: 24.8 },
+      // Gazette p.7, Construction, Senior Management row.
+      senior_management: { designatedGroupMale: 38.3, designatedGroupFemale: 27.8 },
+      // Gazette p.7, Construction, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 46.7,
+        designatedGroupFemale: 34.4,
+      },
+      // Gazette p.7, Construction, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.7, Construction, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.7, column 2.
+    sectorCode: 'education',
+    sectorName: 'Education',
+    targets: {
+      // Gazette p.7, Education, Top management row.
+      top_management: { designatedGroupMale: 27.6, designatedGroupFemale: 46.1 },
+      // Gazette p.7, Education, Senior Management row.
+      senior_management: { designatedGroupMale: 30.5, designatedGroupFemale: 46.1 },
+      // Gazette p.7, Education, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 43,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.7, Education, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.7, Education, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.7, column 3.
+    sectorCode: 'electricity_gas',
+    sectorName: 'Electricity, Gas, Steam and Air Conditioning Supply',
+    targets: {
+      // Gazette p.7, Electricity, Gas, Steam and Air Conditioning Supply, Top management row.
+      top_management: { designatedGroupMale: 31.7, designatedGroupFemale: 27.9 },
+      // Gazette p.7, Electricity, Gas, Steam and Air Conditioning Supply, Senior Management row.
+      senior_management: { designatedGroupMale: 42.7, designatedGroupFemale: 39.5 },
+      // Gazette p.7, Electricity, Gas, Steam and Air Conditioning Supply, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 49.8,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.7, Electricity, Gas, Steam and Air Conditioning Supply, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.7, Electricity, Gas, Steam and Air Conditioning Supply, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.7, column 4.
+    sectorCode: 'finance_insurance',
+    sectorName: 'Financial and Insurance Activities',
+    targets: {
+      // Gazette p.7, Financial and Insurance Activities, Top management row.
+      top_management: { designatedGroupMale: 27.8, designatedGroupFemale: 35.3 },
+      // Gazette p.7, Financial and Insurance Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 31.7, designatedGroupFemale: 45.3 },
+      // Gazette p.7, Financial and Insurance Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 40.7,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.7, Financial and Insurance Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.5, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.7, Financial and Insurance Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.8, column 1.
+    sectorCode: 'health_social_work',
+    sectorName: 'Human Health and Social Work Activities',
+    targets: {
+      // Gazette p.8, Human Health and Social Work Activities, Top management row.
+      top_management: { designatedGroupMale: 27.6, designatedGroupFemale: 43.7 },
+      // Gazette p.8, Human Health and Social Work Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 39.8, designatedGroupFemale: 46.1 },
+      // Gazette p.8, Human Health and Social Work Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 49.8,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.8, Human Health and Social Work Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.8, Human Health and Social Work Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.8, column 2.
+    sectorCode: 'information_communication',
+    sectorName: 'Information and Communication',
+    targets: {
+      // Gazette p.8, Information and Communication, Top management row.
+      top_management: { designatedGroupMale: 25.4, designatedGroupFemale: 31.2 },
+      // Gazette p.8, Information and Communication, Senior Management row.
+      senior_management: { designatedGroupMale: 28.6, designatedGroupFemale: 40 },
+      // Gazette p.8, Information and Communication, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 37.9,
+        designatedGroupFemale: 38.9,
+      },
+      // Gazette p.8, Information and Communication, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 46, designatedGroupFemale: 45.7 },
+    },
+    // Gazette p.8, Information and Communication, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.8, column 3.
+    sectorCode: 'manufacturing',
+    sectorName: 'Manufacturing',
+    targets: {
+      // Gazette p.8, Manufacturing, Top management row.
+      top_management: { designatedGroupMale: 24.1, designatedGroupFemale: 25 },
+      // Gazette p.8, Manufacturing, Senior Management row.
+      senior_management: { designatedGroupMale: 32.4, designatedGroupFemale: 33.6 },
+      // Gazette p.8, Manufacturing, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 40.4,
+        designatedGroupFemale: 37.7,
+      },
+      // Gazette p.8, Manufacturing, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 39.6 },
+    },
+    // Gazette p.8, Manufacturing, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.8, column 4.
+    sectorCode: 'mining_quarrying',
+    sectorName: 'Mining and Quarrying',
+    targets: {
+      // Gazette p.8, Mining and Quarrying, Top management row.
+      top_management: { designatedGroupMale: 33.1, designatedGroupFemale: 24.4 },
+      // Gazette p.8, Mining and Quarrying, Senior Management row.
+      senior_management: { designatedGroupMale: 36.3, designatedGroupFemale: 28.2 },
+      // Gazette p.8, Mining and Quarrying, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 43.2,
+        designatedGroupFemale: 34.4,
+      },
+      // Gazette p.8, Mining and Quarrying, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 36.9 },
+    },
+    // Gazette p.8, Mining and Quarrying, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.9, column 1.
+    sectorCode: 'professional_scientific_technical',
+    sectorName: 'Professional, Scientific and Technical Activities',
+    targets: {
+      // Gazette p.9, Professional, Scientific and Technical Activities, Top management row.
+      top_management: { designatedGroupMale: 24.4, designatedGroupFemale: 38.1 },
+      // Gazette p.9, Professional, Scientific and Technical Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 29.9, designatedGroupFemale: 46.1 },
+      // Gazette p.9, Professional, Scientific and Technical Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 35.9,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.9, Professional, Scientific and Technical Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.9, Professional, Scientific and Technical Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.9, column 2.
+    sectorCode: 'public_administration_defence',
+    sectorName: 'Public Administration and Defence; Compulsory Social Security',
+    targets: {
+      // Gazette p.9, Public Administration and Defence; Compulsory Social Security, Top management row.
+      top_management: { designatedGroupMale: 49.8, designatedGroupFemale: 41.9 },
+      // Gazette p.9, Public Administration and Defence; Compulsory Social Security, Senior Management row.
+      senior_management: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+      // Gazette p.9, Public Administration and Defence; Compulsory Social Security, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 49.8,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.9, Public Administration and Defence; Compulsory Social Security, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.9, Public Administration and Defence; Compulsory Social Security, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.9, column 3.
+    sectorCode: 'real_estate',
+    sectorName: 'Real Estate Activities',
+    targets: {
+      // Gazette p.9, Real Estate Activities, Top management row.
+      top_management: { designatedGroupMale: 18.9, designatedGroupFemale: 30.3 },
+      // Gazette p.9, Real Estate Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 22.9, designatedGroupFemale: 46.1 },
+      // Gazette p.9, Real Estate Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 32.4,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.9, Real Estate Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 38.3, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.9, Real Estate Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.9, column 4.
+    sectorCode: 'transport_storage',
+    sectorName: 'Transportation and Storage',
+    targets: {
+      // Gazette p.9, Transportation and Storage, Top management row.
+      top_management: { designatedGroupMale: 32.2, designatedGroupFemale: 30 },
+      // Gazette p.9, Transportation and Storage, Senior Management row.
+      senior_management: { designatedGroupMale: 42.1, designatedGroupFemale: 35.9 },
+      // Gazette p.9, Transportation and Storage, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 46.3,
+        designatedGroupFemale: 40.7,
+      },
+      // Gazette p.9, Transportation and Storage, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 41.4 },
+    },
+    // Gazette p.9, Transportation and Storage, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.10, column 1.
+    sectorCode: 'water_supply',
+    sectorName: 'Water Supply, Sewerage, Waste Management and Remediation Activities',
+    targets: {
+      // Gazette p.10, Water Supply, Sewerage, Waste Management and Remediation Activities, Top management row.
+      top_management: { designatedGroupMale: 49.8, designatedGroupFemale: 35.9 },
+      // Gazette p.10, Water Supply, Sewerage, Waste Management and Remediation Activities, Senior Management row.
+      senior_management: { designatedGroupMale: 49.8, designatedGroupFemale: 41 },
+      // Gazette p.10, Water Supply, Sewerage, Waste Management and Remediation Activities, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 49.8,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.10, Water Supply, Sewerage, Waste Management and Remediation Activities, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 49.8, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.10, Water Supply, Sewerage, Waste Management and Remediation Activities, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+  {
+    // Source: Gazette No. 52514, 15 Apr 2025, GN 6124, table p.10, column 2.
+    sectorCode: 'wholesale_retail_trade',
+    sectorName: 'Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles',
+    targets: {
+      // Gazette p.10, Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles, Top management row.
+      top_management: { designatedGroupMale: 24.2, designatedGroupFemale: 27.5 },
+      // Gazette p.10, Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles, Senior Management row.
+      senior_management: { designatedGroupMale: 35, designatedGroupFemale: 38.6 },
+      // Gazette p.10, Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles, Professionally Qualified & Middle Management row.
+      professionally_qualified_middle_management: {
+        designatedGroupMale: 42.2,
+        designatedGroupFemale: 46.1,
+      },
+      // Gazette p.10, Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles, Skilled Technical row.
+      skilled_technical: { designatedGroupMale: 48.1, designatedGroupFemale: 46.1 },
+    },
+    // Gazette p.10, Wholesale and Retail Trade; Repair of Motor Vehicles and Motorcycles, "Disability only | All" row.
+    disabilityTarget: 3,
+  },
+]
 
 // ---------------------------------------------------------------------------
 // Lookup helpers
