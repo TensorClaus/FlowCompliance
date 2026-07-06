@@ -88,32 +88,31 @@ function buildValidEEA13() {
 // ---------------------------------------------------------------------------
 
 describe('SectorCodeSchema', () => {
-  it('accepts all 19 sector codes', () => {
+  it('accepts all 18 sector codes', () => {
     const codes = [
-      'agriculture',
-      'mining',
-      'manufacturing',
-      'electricity_gas_water',
+      'accommodation_food_service',
+      'administrative_support',
+      'agriculture_forestry_fishing',
+      'arts_entertainment_recreation',
       'construction',
-      'retail_wholesale',
-      'transport_storage',
-      'finance_insurance',
-      'real_estate',
-      'community_services',
       'education',
-      'health',
-      'hospitality',
-      'information_technology',
-      'professional_services',
-      'administrative_services',
-      'public_administration',
-      'other_services',
-      'domestic_services',
+      'electricity_gas',
+      'finance_insurance',
+      'health_social_work',
+      'information_communication',
+      'manufacturing',
+      'mining_quarrying',
+      'professional_scientific_technical',
+      'public_administration_defence',
+      'real_estate',
+      'transport_storage',
+      'water_supply',
+      'wholesale_retail_trade',
     ]
     for (const code of codes) {
       expect(SectorCodeSchema.safeParse(code).success).toBe(true)
     }
-    expect(codes).toHaveLength(19)
+    expect(codes).toHaveLength(18)
   })
 
   it('rejects unknown sector code', () => {
