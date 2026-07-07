@@ -101,30 +101,91 @@ describe('EAP_DATA', () => {
     }
   })
 
-  // No-stub invariant: each province's set of economicallyActiveThousands
-  // values must NOT be a uniform scalar multiple of National's (the
-  // placeholder-era stub pattern this phase eliminates). Guarded with
-  // it.runIf on non-zero data so it does not spuriously pass against this
-  // scaffold-only commit's all-zero data; activates once real values are
-  // loaded in the following commit.
-  it.runIf(EAP_DATA.some((d) => d.economicallyActiveThousands !== 0))(
-    'no province is a uniform scalar multiple of National (anti-stub check)',
-    () => {
-      const national = getEapByProvince('National')
-      for (const province of PROVINCES) {
-        if (province === 'National') continue
-        const rows = getEapByProvince(province)
-        const ratios = rows.map((row) => {
-          const match = national.find((n) => n.race === row.race && n.gender === row.gender)
-          if (!match || match.economicallyActiveThousands === 0) return null
-          return row.economicallyActiveThousands / match.economicallyActiveThousands
-        })
-        const definedRatios = ratios.filter((r): r is number => r !== null)
-        const allIdentical = definedRatios.every((r) => r === definedRatios[0])
-        expect(allIdentical).toBe(false)
-      }
-    },
-  )
+  // No-stub invariant (ACTIVATED — Plan 02 loaded real StatsSA values): each
+  // province's set of economicallyActiveThousands values must NOT be a
+  // uniform scalar multiple of National's (the placeholder-era stub pattern
+  // this phase eliminates). Previously guarded with it.runIf on non-zero
+  // data to avoid a spurious pass against Plan 01's all-zero scaffold; now a
+  // plain, unconditional assertion since every province is independently
+  // sourced from the QLFS EAP sheet.
+  it('no province is a uniform scalar multiple of National (anti-stub check)', () => {
+    const national = getEapByProvince('National')
+    for (const province of PROVINCES) {
+      if (province === 'National') continue
+      const rows = getEapByProvince(province)
+      const ratios = rows.map((row) => {
+        const match = national.find((n) => n.race === row.race && n.gender === row.gender)
+        if (!match || match.economicallyActiveThousands === 0) return null
+        return row.economicallyActiveThousands / match.economicallyActiveThousands
+      })
+      const definedRatios = ratios.filter((r): r is number => r !== null)
+      const allIdentical = definedRatios.every((r) => r === definedRatios[0])
+      expect(allIdentical).toBe(false)
+    }
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Verbatim spot-checks (StatsSA QLFS Q1 2026, sheet "EAP")
+// ---------------------------------------------------------------------------
+
+// Each value below was confirmed directly against the verified local xlsx
+// artifact during 02-02 execution (programmatic extraction + arithmetic
+// identity checks), not trusted blindly from 02-RESEARCH.md's sample
+// (Phase 1's founder gate previously caught 3 mislabeled research samples).
+describe('EAP_DATA verbatim spot-checks', () => {
+  it('matches QLFS Q1 2026 value for Western Cape, Black African, Male, Economically active', () => {
+    // Source: StatsSA QLFS Q1 2026, sheet "EAP", geography block "Western cape",
+    // race row "Black African" (row 16), Male block, col D (Economically active).
+    const result = getEapByProvince('Western Cape').find(
+      (d) => d.race === RACE_LABELS.A && d.gender === GENDER_LABELS.M,
+    )
+    expect(result?.economicallyActiveThousands).toBeCloseTo(838.862_953_239_343_37, 2)
+  })
+
+  it('matches QLFS Q1 2026 value for National, Black African, Male, Economically active', () => {
+    // Source: StatsSA QLFS Q1 2026, sheet "EAP", geography block "South Africa"
+    // (National), race row "Black African" (row 9), Male block, col D
+    // (Economically active).
+    const result = getEapByProvince('National').find(
+      (d) => d.race === RACE_LABELS.A && d.gender === GENDER_LABELS.M,
+    )
+    expect(result?.economicallyActiveThousands).toBeCloseTo(10_837.023_538_860_407, 2)
+  })
+
+  it('matches QLFS Q1 2026 value for Gauteng, White, Female, Economically active', () => {
+    // Source: StatsSA QLFS Q1 2026, sheet "EAP", geography block "Gauteng",
+    // race row "White" (row 61), Female block, col I (Economically active).
+    const result = getEapByProvince('Gauteng').find(
+      (d) => d.race === RACE_LABELS.W && d.gender === GENDER_LABELS.F,
+    )
+    expect(result?.economicallyActiveThousands).toBeCloseTo(359.529_881_791_388, 2)
+  })
+
+  it('matches the QLFS Q1 2026 national grand total (Total row, Total-gender block, Economically active column)', () => {
+    // Source: StatsSA QLFS Q1 2026, sheet "EAP", "South Africa" Total row
+    // (row 13), Total-gender block, col N (Economically active). Sum of all
+    // 8 National race-gender economicallyActiveThousands values.
+    const national = getEapByProvince('National')
+    const sum = national.reduce((acc, d) => acc + d.economicallyActiveThousands, 0)
+    expect(sum).toBeCloseTo(24_890.968_414_811_73, 2)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Arithmetic-consistency check (Identity 2: Employed + Unemployed = Economically active)
+// ---------------------------------------------------------------------------
+
+describe('EAP_DATA arithmetic consistency', () => {
+  it('Employed + Unemployed equals Economically active for every National race-gender point', () => {
+    const national = getEapByProvince('National')
+    for (const dp of national) {
+      expect(dp.employedThousands + dp.unemployedThousands).toBeCloseTo(
+        dp.economicallyActiveThousands,
+        2,
+      )
+    }
+  })
 })
 
 // ---------------------------------------------------------------------------
