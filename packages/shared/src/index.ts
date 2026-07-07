@@ -244,7 +244,6 @@ export {
   type EapDataPoint,
   EAP_DATA,
   getEapByProvince,
-  getEapByProvinceAndLevel,
 } from './data/eap.js'
 
 // EEA UI reference data — PII field paths and field labels for audit history
