@@ -382,6 +382,13 @@ describe('EEA13Schema', () => {
     expect(result.success).toBe(false)
   })
 
+  it('rejects planPeriod dates that are not parseable as dates', () => {
+    const data = buildValidEEA13()
+    data.planPeriod = { startDate: 'not-a-date', endDate: '2029-12-31' }
+    const result = EEA13Schema.safeParse(data)
+    expect(result.success).toBe(false)
+  })
+
   it('rejects invalid sectorCode', () => {
     const data = { ...buildValidEEA13(), sectorCode: 'invalid_sector' }
     const result = EEA13Schema.safeParse(data)
