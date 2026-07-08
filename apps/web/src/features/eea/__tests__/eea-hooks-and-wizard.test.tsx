@@ -1263,7 +1263,7 @@ describe('EEA hooks and wizard', () => {
 
     await user.click(screen.getByRole('button', { name: 'Review and submit' }))
 
-    expect(screen.getByTestId('disability-flag-banner')).toBeInTheDocument()
+    expect(screen.getByTestId('review-disability-flag')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Submit for CEO signing' })).toBeDisabled()
     expect(document.querySelector('[data-dismiss]')).toBeNull()
     expect(document.querySelector('[data-close]')).toBeNull()
