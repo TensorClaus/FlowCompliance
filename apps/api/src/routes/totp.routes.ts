@@ -21,7 +21,7 @@ const BACKUP_CODE_LENGTH = 8
 // ─── Validation schemas ─────────────────────────────────────────────────────
 
 const verifyBodySchema = z.object({
-  userId: z.string().uuid('userId must be a valid UUID'),
+  userId: z.uuid('userId must be a valid UUID'),
   code: z
     .string()
     .length(TOTP_DIGITS, `code must be exactly ${String(TOTP_DIGITS)} digits`)
