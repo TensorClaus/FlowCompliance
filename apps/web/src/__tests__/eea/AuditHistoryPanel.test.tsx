@@ -21,7 +21,7 @@ import {
   createRouter,
   RouterProvider,
 } from '@tanstack/react-router'
-import { render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { http, HttpResponse } from 'msw'
 import { describe, expect, it } from 'vitest'
@@ -224,5 +224,165 @@ describe('AuditHistoryPanel', () => {
     renderPanel()
 
     await screen.findByText('No audit events found for the selected filters.')
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 7 — Error state
+  // -------------------------------------------------------------------------
+
+  it('renders the error alert when the events request fails', async () => {
+    server.use(http.get('/eea2/:formId/events', () => new HttpResponse(null, { status: 500 })))
+
+    renderPanel()
+
+    const alert = await screen.findByTestId('audit-error')
+    expect(alert).toHaveTextContent('Request failed with status 500')
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 8 — Section filter interaction writes the URL and refetches
+  // -------------------------------------------------------------------------
+
+  it('changing the section select fires a fresh page-1 request with the new section', async () => {
+    const capturedUrls: string[] = []
+    server.use(
+      http.get('/eea2/:formId/events', ({ request }) => {
+        capturedUrls.push(request.url)
+        return HttpResponse.json({ events: [], nextCursor: null })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderPanel('?cursor=stale-cursor')
+
+    await screen.findByTestId('audit-section-filter')
+    await user.selectOptions(screen.getByTestId('audit-section-filter'), 'Section B/C')
+
+    await waitFor(() => {
+      const lastUrl = capturedUrls.at(-1) ?? ''
+      expect(lastUrl).toContain('section=Section+B%2FC')
+      expect(lastUrl).not.toContain('cursor=stale-cursor')
+    })
+  })
+
+  it('selecting All removes the section param entirely', async () => {
+    const capturedUrls: string[] = []
+    server.use(
+      http.get('/eea2/:formId/events', ({ request }) => {
+        capturedUrls.push(request.url)
+        return HttpResponse.json({ events: [], nextCursor: null })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderPanel('?section=Section+D')
+
+    await screen.findByTestId('audit-section-filter')
+    await user.selectOptions(screen.getByTestId('audit-section-filter'), 'All')
+
+    await waitFor(() => {
+      expect(capturedUrls.at(-1) ?? '').not.toContain('section=')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 9 — Date inputs and Clear write the URL
+  // -------------------------------------------------------------------------
+
+  it('changing the from/to dates and clearing them updates the request URL', async () => {
+    const capturedUrls: string[] = []
+    server.use(
+      http.get('/eea2/:formId/events', ({ request }) => {
+        capturedUrls.push(request.url)
+        return HttpResponse.json({ events: [], nextCursor: null })
+      }),
+    )
+
+    renderPanel()
+    const fromInput = await screen.findByTestId('audit-from-date')
+
+    fireEvent.change(fromInput, { target: { value: '2026-02-01' } })
+    await waitFor(() => {
+      expect(capturedUrls.at(-1) ?? '').toContain('from=2026-02-01')
+    })
+
+    fireEvent.change(screen.getByTestId('audit-to-date'), { target: { value: '2026-03-31' } })
+    await waitFor(() => {
+      expect(capturedUrls.at(-1) ?? '').toContain('to=2026-03-31')
+    })
+
+    fireEvent.click(screen.getByTestId('audit-clear-date-range'))
+    await waitFor(() => {
+      const lastUrl = capturedUrls.at(-1) ?? ''
+      expect(lastUrl).not.toContain('from=')
+      expect(lastUrl).not.toContain('to=')
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 10 — Pagination: Load more appends the next page
+  // -------------------------------------------------------------------------
+
+  it('Load more appends the next page using the buffered cursor', async () => {
+    const pageOne = Array.from({ length: 2 }, (_, i) =>
+      buildAuditEvent({ eventId: `evt-p1-${String(i)}` }),
+    )
+    const pageTwo = [buildAuditEvent({ eventId: 'evt-p2-0' })]
+
+    server.use(
+      http.get('/eea2/:formId/events', ({ request }) => {
+        const cursor = new URL(request.url).searchParams.get('cursor')
+        return cursor === 'cursor-2'
+          ? HttpResponse.json({ events: pageTwo, nextCursor: null })
+          : HttpResponse.json({ events: pageOne, nextCursor: 'cursor-2' })
+      }),
+    )
+
+    const user = userEvent.setup()
+    renderPanel()
+
+    const loadMore = await screen.findByTestId('audit-load-more')
+    await user.click(loadMore)
+
+    await waitFor(() => {
+      expect(screen.getAllByTestId(/^timeline-entry-/).length).toBe(3)
+    })
+    expect(screen.queryByTestId('audit-load-more')).not.toBeInTheDocument()
+  })
+
+  // -------------------------------------------------------------------------
+  // Test 11 — Snapshot drawer closes and unknown section params fall back
+  // -------------------------------------------------------------------------
+
+  it('closes the SnapshotDrawer via its close button', async () => {
+    const event = buildAuditEvent({ eventId: 'evt-close-001' })
+    server.use(
+      http.get('/eea2/:formId/events', () =>
+        HttpResponse.json({ events: [event], nextCursor: null }),
+      ),
+      http.post('/eea2/:formId/replay', () => HttpResponse.json({ sectionA: {} })),
+    )
+
+    const user = userEvent.setup()
+    renderPanel()
+
+    await user.click(await screen.findByTestId('view-snapshot-evt-close-001'))
+    expect(screen.getByTestId('snapshot-banner')).toBeInTheDocument()
+
+    await user.click(screen.getByTestId('snapshot-drawer-close'))
+    await waitFor(() => {
+      expect(screen.queryByTestId('snapshot-banner')).not.toBeInTheDocument()
+    })
+  })
+
+  it('falls back to All for an unknown ?section value', async () => {
+    server.use(
+      http.get('/eea2/:formId/events', () => HttpResponse.json({ events: [], nextCursor: null })),
+    )
+
+    renderPanel('?section=Section+Z')
+
+    const select = await screen.findByTestId('audit-section-filter')
+    expect(select).toHaveValue('All')
   })
 })
