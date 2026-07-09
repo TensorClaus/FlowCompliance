@@ -24,11 +24,14 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: ci
-          POSTGRES_PASSWORD: ci
-          POSTGRES_DB: ci_test
+          # Match the identity hardcoded in apps/api/vitest.config.ts so the
+          # api integration tests run against the service without divergence
+          # between local (docker) and CI databases.
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: simplifi_test
         options: >-
-          --health-cmd "pg_isready -U ci"
+          --health-cmd "pg_isready -U test"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -67,6 +70,15 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # ── Database schema ──────────────────────────────────────────────────────
+      # The api integration tests (event store, RLS, signing) run against a
+      # real Postgres and need the full migration history, including the
+      # simplifi_app RLS role the migrations self-provision.
+      - name: Migrate test database
+        run: pnpm --filter @simplifi/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/simplifi_test
+
       # ── Typecheck ───────────────────────────────────────────────────────────
       - name: Typecheck
         run: pnpm typecheck
@@ -84,7 +96,7 @@ jobs:
         run: pnpm --filter @simplifi/api test:coverage
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+          DATABASE_URL: postgresql://test:test@localhost:5432/simplifi_test
           REDIS_URL: redis://localhost:6379
           SESSION_SECRET: ci-test-session-secret-must-be-at-least-32-chars
 
@@ -142,6 +154,11 @@ jobs:
 
       - name: Install Playwright browsers
         run: pnpm --filter @simplifi/web exec playwright install --with-deps chromium
+
+      - name: Migrate test database
+        run: pnpm --filter @simplifi/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
 
       - name: Start API server
         run: pnpm --filter @simplifi/api start &

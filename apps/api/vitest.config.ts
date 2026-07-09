@@ -12,7 +12,12 @@ export default defineConfig({
       NODE_ENV: 'test',
     },
     coverage: {
-      provider: 'v8',
+      // istanbul, matching packages/shared and apps/web: the v8 provider
+      // emits synthetic unreachable line-1 branches per module, distorting
+      // branch coverage.
+      provider: 'istanbul',
+      include: ['src/**/*.ts'],
+      exclude: ['src/**/*.test.ts', 'src/**/__tests__/**'],
       thresholds: {
         branches: 80,
         functions: 80,
