@@ -45,29 +45,40 @@ export async function buildApp(): Promise<FastifyInstance> {
   // are reachable without a pre-existing Bearer token. The tenant-context plugin
   // only skips /health explicitly; auth routes issue the token that all other
   // routes then require.
-  await app.register((instance) => {
+  // Register callbacks MUST signal completion to avvio — either by being
+  // async or by calling `done`. A sync callback that does neither hangs the
+  // boot until AVV_ERR_PLUGIN_EXEC_TIMEOUT fires.
+  await app.register((instance, _opts, done) => {
     authRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     totpRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     employerRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea1Routes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea1DeclarationsRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea2Routes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea2EventsRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eventStoreRoutes(instance)
+    done()
   })
 
   // Tenant context — enforces JWT auth + sets RLS GUC for all non-public routes.
@@ -83,8 +94,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // E2E suites. Never registered in production or staging environments.
   if (config.NODE_ENV === 'test') {
     const { testSeedRoutes } = await import('./routes/test-seed.routes.js')
-    await app.register((instance) => {
+    await app.register((instance, _opts, done) => {
       testSeedRoutes(instance)
+      done()
     })
   }
 
