@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Integration suites share one Postgres and clean up with deleteMany;
+    // parallel test files deadlock (40P01) and wipe each other's fixtures.
+    fileParallelism: false,
     env: {
       DATABASE_URL: 'postgresql://test:test@localhost:5432/simplifi_test',
       REDIS_URL: 'redis://localhost:6379',
