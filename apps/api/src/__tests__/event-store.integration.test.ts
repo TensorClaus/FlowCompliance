@@ -503,11 +503,11 @@ describe('event-store integration', () => {
     } finally {
       await worker.close()
       await queue.close()
-      await runInTenantTransaction(tenantId, async (tx): Promise<void> => {
-        await tx.eea2Draft.deleteMany({ where: { tenantId } })
-        await tx.eeaEvent.deleteMany({ where: { tenantId } })
-        await tx.tenant.deleteMany({ where: { id: tenantId } })
-      })
+      // Plain sequential deletes: cleanup must not depend on the tenant-tx
+      // helper under test, and a cleanup failure here masks the real assertion.
+      await prisma.eea2Draft.deleteMany({ where: { tenantId } })
+      await prisma.eeaEvent.deleteMany({ where: { tenantId } })
+      await prisma.tenant.deleteMany({ where: { id: tenantId } })
     }
   })
 })
