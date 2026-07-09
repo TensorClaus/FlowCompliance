@@ -63,7 +63,7 @@ async function seedPiiEvent(
 ): Promise<string> {
   const id = randomUUID()
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
     await tx.eeaEvent.create({
       data: {
         id,
@@ -223,7 +223,7 @@ describe('POST /eea2/:formId/replay', () => {
     const lateEventId = randomUUID()
     const lateTimestamp = new Date((seeded[9]?.createdAt.getTime() ?? Date.now()) + 1000)
     await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
       await tx.eeaEvent.create({
         data: {
           id: lateEventId,

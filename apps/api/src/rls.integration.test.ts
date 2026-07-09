@@ -18,8 +18,8 @@ describe.skipIf(!RLS_INTEGRATION)('RLS cross-tenant isolation', () => {
   })
   const prisma = new PrismaClient({ adapter })
 
-  const TENANT_A_ID = 'aaaaaaaa-0000-0000-0000-000000000001'
-  const TENANT_B_ID = 'bbbbbbbb-0000-0000-0000-000000000001'
+  const TENANT_A_ID = 'aaaaaaaa-0000-4000-8000-000000000001'
+  const TENANT_B_ID = 'bbbbbbbb-0000-4000-8000-000000000001'
 
   beforeAll(async () => {
     // Seed two isolated tenants (bypasses RLS — superuser connection)
@@ -52,7 +52,7 @@ describe.skipIf(!RLS_INTEGRATION)('RLS cross-tenant isolation', () => {
 
   it('Tenant A can see its own eea_events', async () => {
     const rows = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL app.tenant_id = ${TENANT_A_ID}`
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${TENANT_A_ID}, true)`
       return tx.$queryRaw<{ count: bigint }[]>`
         SELECT COUNT(*)::bigint AS count FROM eea_events
       `
@@ -62,7 +62,7 @@ describe.skipIf(!RLS_INTEGRATION)('RLS cross-tenant isolation', () => {
 
   it('Tenant B cannot see Tenant A eea_events (RLS blocks cross-tenant reads)', async () => {
     const rows = await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SET LOCAL app.tenant_id = ${TENANT_B_ID}`
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${TENANT_B_ID}, true)`
       return tx.$queryRaw<{ count: bigint }[]>`
         SELECT COUNT(*)::bigint AS count FROM eea_events
       `
