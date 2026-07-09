@@ -503,11 +503,12 @@ describe('event-store integration', () => {
     } finally {
       await worker.close()
       await queue.close()
-      // Plain sequential deletes: cleanup must not depend on the tenant-tx
-      // helper under test, and a cleanup failure here masks the real assertion.
+      // The event store is database-enforced append-only: the
+      // no_delete_events rule rewrites DELETE on eea_events to a no-op, so
+      // the tenant row (FK'd by its events) can never be deleted either.
+      // Only the mutable draft is cleaned; the per-test random tenant and
+      // its immutable events are left behind by design.
       await prisma.eea2Draft.deleteMany({ where: { tenantId } })
-      await prisma.eeaEvent.deleteMany({ where: { tenantId } })
-      await prisma.tenant.deleteMany({ where: { id: tenantId } })
     }
   })
 })
