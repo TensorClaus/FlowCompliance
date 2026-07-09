@@ -70,6 +70,12 @@ function getUserId(requestUser: { sub: string; userId?: unknown }): string {
     : requestUser.sub
 }
 
+/** Result of a draft mutation transaction, replied to the client post-commit. */
+interface MutationOutcome {
+  code: 200 | 400 | 404 | 409
+  body: { status: string } | { error: string }
+}
+
 export function eea2Routes(app: FastifyInstance): void {
   app.get('/eea2', async (request, reply) => {
     const drafts = await prisma.$transaction(async (tx) => {
@@ -125,26 +131,30 @@ export function eea2Routes(app: FastifyInstance): void {
     return reply.status(201).send(draft)
   })
 
+  // Mutation handlers compute their outcome inside the transaction but only
+  // reply AFTER it resolves — sending the response from within the
+  // $transaction callback lets the client observe the 200 before the commit,
+  // making an immediate read-after-write miss the update.
   app.patch<{ Params: { formId: string }; Body: unknown }>(
     '/eea2/:formId/draft/state',
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      return prisma.$transaction(async (tx) => {
+      const outcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
         await setTenantContext(tx, tenantId)
         const draft = await findDraftForMutation(tx, formId, tenantId)
 
         if (draft === null) {
-          return reply.status(404).send({ error: 'Draft not found' })
+          return { code: 404, body: { error: 'Draft not found' } }
         }
 
         if (draft.status === 'signed') {
-          return reply.status(409).send({ error: 'Form is immutable' })
+          return { code: 409, body: { error: 'Form is immutable' } }
         }
 
         const parsed = draftStateBodySchema.safeParse(request.body)
         if (!parsed.success) {
-          return reply.status(400).send({ error: 'Invalid request body' })
+          return { code: 400, body: { error: 'Invalid request body' } }
         }
 
         const nextState = {
@@ -160,8 +170,9 @@ export function eea2Routes(app: FastifyInstance): void {
           data: { state: nextState as Prisma.InputJsonValue },
         })
 
-        return reply.status(200).send({ status: draft.status })
+        return { code: 200, body: { status: draft.status } }
       })
+      return reply.status(outcome.code).send(outcome.body)
     },
   )
 
@@ -170,21 +181,21 @@ export function eea2Routes(app: FastifyInstance): void {
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      return prisma.$transaction(async (tx) => {
+      const outcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
         await setTenantContext(tx, tenantId)
         const draft = await findDraftForMutation(tx, formId, tenantId)
 
         if (draft === null) {
-          return reply.status(404).send({ error: 'Draft not found' })
+          return { code: 404, body: { error: 'Draft not found' } }
         }
 
         if (draft.status === 'signed') {
-          return reply.status(409).send({ error: 'Form is immutable' })
+          return { code: 409, body: { error: 'Form is immutable' } }
         }
 
         const parsed = statusBodySchema.safeParse(request.body)
         if (!parsed.success) {
-          return reply.status(400).send({ error: 'Invalid request body' })
+          return { code: 400, body: { error: 'Invalid request body' } }
         }
 
         await tx.eea2Draft.update({
@@ -192,8 +203,9 @@ export function eea2Routes(app: FastifyInstance): void {
           data: { status: parsed.data.status },
         })
 
-        return reply.status(200).send({ status: parsed.data.status })
+        return { code: 200, body: { status: parsed.data.status } }
       })
+      return reply.status(outcome.code).send(outcome.body)
     },
   )
 
@@ -202,21 +214,21 @@ export function eea2Routes(app: FastifyInstance): void {
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      return prisma.$transaction(async (tx) => {
+      const outcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
         await setTenantContext(tx, tenantId)
         const draft = await findDraftForMutation(tx, formId, tenantId)
 
         if (draft === null) {
-          return reply.status(404).send({ error: 'Draft not found' })
+          return { code: 404, body: { error: 'Draft not found' } }
         }
 
         if (draft.status === 'signed') {
-          return reply.status(409).send({ error: 'Form is immutable' })
+          return { code: 409, body: { error: 'Form is immutable' } }
         }
 
         const parsed = patchDraftBodySchema.safeParse(request.body)
         if (!parsed.success) {
-          return reply.status(400).send({ error: 'Invalid request body' })
+          return { code: 400, body: { error: 'Invalid request body' } }
         }
 
         const data: Prisma.Eea2DraftUpdateInput = {}
@@ -232,27 +244,28 @@ export function eea2Routes(app: FastifyInstance): void {
 
         await tx.eea2Draft.update({ where: { id: formId }, data })
 
-        return reply.status(200).send({ status: parsed.data.status ?? draft.status })
+        return { code: 200, body: { status: parsed.data.status ?? draft.status } }
       })
+      return reply.status(outcome.code).send(outcome.body)
     },
   )
 
   app.put<{ Params: { id: string }; Body: unknown }>('/eea2/:id', async (request, reply) => {
-    return prisma.$transaction(async (tx) => {
+    const outcome = await prisma.$transaction(async (tx): Promise<MutationOutcome> => {
       await setTenantContext(tx, request.user.tenantId)
       const draft = await findDraftForMutation(tx, request.params.id, request.user.tenantId)
 
       if (draft === null) {
-        return reply.status(404).send({ error: 'Draft not found' })
+        return { code: 404, body: { error: 'Draft not found' } }
       }
 
       if (draft.status === 'signed') {
-        return reply.status(409).send({ error: 'Form is immutable' })
+        return { code: 409, body: { error: 'Form is immutable' } }
       }
 
       const parsed = patchDraftBodySchema.safeParse(request.body)
       if (!parsed.success) {
-        return reply.status(400).send({ error: 'Invalid request body' })
+        return { code: 400, body: { error: 'Invalid request body' } }
       }
 
       await tx.eea2Draft.update({
@@ -270,8 +283,9 @@ export function eea2Routes(app: FastifyInstance): void {
         },
       })
 
-      return reply.status(200).send({ status: parsed.data.status ?? draft.status })
+      return { code: 200, body: { status: parsed.data.status ?? draft.status } }
     })
+    return reply.status(outcome.code).send(outcome.body)
   })
 
   app.post<{ Params: { formId: string }; Body: unknown }>(
