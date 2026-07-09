@@ -126,12 +126,12 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const { declarationId } = request.params
 
-      // RLS automatically appends tenantId to the WHERE clause via the
-      // SET LOCAL app.tenant_id guard set by tenant-context. A row that
-      // belongs to another tenant is therefore invisible and findFirst
-      // returns null — which we surface as 404 to avoid leaking existence.
+      // Tenant isolation is enforced explicitly at the query layer: the
+      // caller's JWT tenantId scopes the lookup, so a row belonging to
+      // another tenant resolves to null — surfaced as 404 to avoid leaking
+      // existence. RLS provides defence-in-depth at the database layer.
       const declaration = await prisma.eea1Declaration.findFirst({
-        where: { id: declarationId },
+        where: { id: declarationId, tenantId: request.user.tenantId },
       })
 
       if (declaration === null) {
@@ -169,9 +169,10 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
       const { declarationId } = request.params
 
       // Load the existing row first so we can (a) authorise the caller and
-      // (b) capture prevValue for each field event.
+      // (b) capture prevValue for each field event. Tenant-scoped explicitly,
+      // matching the GET handler; RLS is defence-in-depth.
       const existing = await prisma.eea1Declaration.findFirst({
-        where: { id: declarationId },
+        where: { id: declarationId, tenantId: request.user.tenantId },
       })
       if (existing === null) {
         return reply.status(404).send({ error: 'Not found' })
