@@ -185,7 +185,8 @@ const runInTenantTransaction = async <T>(
   execute: (tx: Prisma.TransactionClient) => Promise<T>,
 ): Promise<T> =>
   prisma.$transaction(async (tx): Promise<T> => {
-    await tx.$executeRaw`SET LOCAL app.tenant_id = ${tenantId}`
+    // set_config(..., true) — Postgres rejects bind parameters in SET.
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
     return execute(tx)
   })
 

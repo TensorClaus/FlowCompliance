@@ -110,7 +110,8 @@ async function seedDeclaration(tenantId: string, employeeId: string): Promise<st
       disability: 'No',
       foreignNational: false,
       signatureDataUrl: 'data:image/png;base64,SEEDED',
-      declarationDate: todayIso(),
+      // Prisma DateTime @db.Date rejects date-only strings — seed with a Date.
+      declarationDate: new Date(`${todayIso()}T00:00:00.000Z`),
     },
   })
 
