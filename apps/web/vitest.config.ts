@@ -22,14 +22,19 @@ export default defineConfig({
     },
     setupFiles: ['./src/test/setup.ts'],
     coverage: {
-      provider: 'v8',
+      // istanbul, matching packages/shared: the v8 provider emits synthetic
+      // unreachable line-1 branches per module, distorting branch coverage.
+      provider: 'istanbul',
       include: ['src/**/*.{ts,tsx}'],
-      exclude: ['src/main.tsx', 'src/test/**', 'src/**/*.test.{ts,tsx}'],
+      exclude: ['src/main.tsx', 'src/test/**', 'src/**/*.test.{ts,tsx}', 'src/**/__tests__/**'],
+      // 80 aligns web with the shared and api gates (ci.yml enforces
+      // per-package thresholds and documents 80). The previous 90 was set
+      // while the coverage step was broken and never actually enforced.
       thresholds: {
-        branches: 90,
-        functions: 90,
-        lines: 90,
-        statements: 90,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+        statements: 80,
       },
     },
   },
