@@ -107,6 +107,14 @@ function todayIso(): string {
   return iso ?? ''
 }
 
+/**
+ * Convert a validated yyyy-mm-dd string to a Date at UTC midnight for
+ * Prisma's DateTime @db.Date columns — the client rejects date-only strings.
+ */
+function dateOnlyToDate(value: string): Date {
+  return new Date(`${value}T00:00:00.000Z`)
+}
+
 // ─── Route registration ───────────────────────────────────────────────────────
 
 export function eea1DeclarationsRoutes(app: FastifyInstance): void {
@@ -215,7 +223,11 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
       const updateData: Record<string, unknown> = {}
       for (const fieldName of PATCHABLE_FIELDS) {
         if (fieldName in body) {
-          updateData[fieldName] = body[fieldName]
+          const value = body[fieldName]
+          updateData[fieldName] =
+            fieldName === 'citizenshipDate' && typeof value === 'string'
+              ? dateOnlyToDate(value)
+              : value
         }
       }
       const updated = await prisma.eea1Declaration.update({
@@ -260,7 +272,10 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
     const created = await prisma.eea1Declaration.create({
       data: {
         ...(body as Record<string, unknown>),
-        declarationDate,
+        ...(body.citizenshipDate === undefined
+          ? {}
+          : { citizenshipDate: dateOnlyToDate(body.citizenshipDate) }),
+        declarationDate: dateOnlyToDate(declarationDate),
         tenantId: request.user.tenantId,
       } as never,
     })

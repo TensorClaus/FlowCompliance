@@ -62,7 +62,9 @@ export const createProjectionSyncWorker = (prisma: PrismaClient): Worker<Project
       const builder = new ProjectionBuilder()
 
       await prisma.$transaction(async (tx): Promise<void> => {
-        await tx.$executeRaw`SET LOCAL app.tenant_id = ${job.data.tenantId}`
+        // set_config(..., true) is the parameterisable equivalent of
+        // SET LOCAL — Postgres rejects bind parameters in SET statements.
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${job.data.tenantId}, true)`
         await builder.build(job.data.tenantId, job.data.reportingYear, tx)
       })
     },
