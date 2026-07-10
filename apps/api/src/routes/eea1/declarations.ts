@@ -47,7 +47,7 @@ const PatchBodySchema = z
     name: z.string().min(2).max(100).optional(),
     workplaceNumber: z.string().min(1).max(20).optional(),
     foreignNational: z.boolean().optional(),
-    citizenshipDate: z.string().date().optional(),
+    citizenshipDate: z.iso.date().optional(),
   })
   .strict()
 
@@ -60,13 +60,13 @@ const PostBodySchema = EEA1DeclarationBaseSchema.extend({
   disabilityNature: z.string().max(200).optional(),
   reasonableAccommodation: z.boolean().optional(),
   signatureDataUrl: z.string().min(1),
-  declarationDate: z.string().date().optional(),
+  declarationDate: z.iso.date().optional(),
 })
   .strict()
   .superRefine((data, ctx) => {
     if (data.foreignNational && !data.citizenshipDate) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['citizenshipDate'],
         message: 'Citizenship/permanent residence date is required for foreign nationals',
       })
@@ -185,7 +185,7 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
       // eea_events regardless of upstream behaviour.
       for (const fieldName of PATCHABLE_FIELDS) {
         if (!(fieldName in body)) continue
-        const newValue = body[fieldName as keyof PatchBody]
+        const newValue = body[fieldName]
         const prevValue = (existing as Record<string, unknown>)[fieldName]
 
         await prisma.eeaEvent.create({
@@ -215,7 +215,7 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
       const updateData: Record<string, unknown> = {}
       for (const fieldName of PATCHABLE_FIELDS) {
         if (fieldName in body) {
-          updateData[fieldName] = body[fieldName as keyof PatchBody]
+          updateData[fieldName] = body[fieldName]
         }
       }
       const updated = await prisma.eea1Declaration.update({

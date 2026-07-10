@@ -11,6 +11,9 @@ export default defineConfig({
   },
   test: {
     globals: true,
+    // Unit tests live under src/. e2e/ holds Playwright specs, which must not be
+    // collected by Vitest (they import @playwright/test and fail at collection).
+    include: ['src/**/*.{test,spec}.{ts,tsx}'],
     environment: 'happy-dom',
     environmentOptions: {
       jsdom: {

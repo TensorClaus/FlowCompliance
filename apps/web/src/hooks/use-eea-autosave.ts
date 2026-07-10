@@ -18,7 +18,7 @@
 // field values.
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ZodTypeAny } from 'zod'
+import type { ZodType } from 'zod'
 
 const DEBOUNCE_MS = 800
 const AUTOSAVE_ENDPOINT = '/eea1'
@@ -27,7 +27,7 @@ export interface UseEEAAutosaveOptions {
   /** EEA form instance identifier — scoped into the PATCH URL. */
   formId: string
   /** Zod schema used for optimistic client-side validation before the PATCH fires. */
-  schema: ZodTypeAny
+  schema: ZodType
   /**
    * Field names that must NEVER be sent through this hook.
    * Use this to exclude PII fields (race, gender, disability, disabilityNature,

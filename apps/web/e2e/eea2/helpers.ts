@@ -94,7 +94,7 @@ export function currentTotp(secret = CEO_TOTP_SECRET): string {
     throw new Error('Unable to generate TOTP from empty HMAC')
   }
 
-  const offset = lastByte & 0xf
+  const offset = lastByte & 15
   const first = hmac.at(offset)
   const second = hmac.at(offset + 1)
   const third = hmac.at(offset + 2)
@@ -104,8 +104,9 @@ export function currentTotp(secret = CEO_TOTP_SECRET): string {
     throw new Error('Unable to generate TOTP from truncated HMAC')
   }
 
+  // RFC 4226 dynamic truncation: drop the sign bit of the leading byte, keep the low byte of the rest.
   const binary =
-    ((first & 0x7f) << 24) | ((second & 0xff) << 16) | ((third & 0xff) << 8) | (fourth & 0xff)
+    ((first & 127) << 24) | ((second & 255) << 16) | ((third & 255) << 8) | (fourth & 255)
 
   return String(binary % 1_000_000).padStart(6, '0')
 }
