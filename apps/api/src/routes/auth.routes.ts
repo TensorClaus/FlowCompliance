@@ -9,14 +9,14 @@ import { prisma } from '../lib/prisma.js'
 // ─── Schemas ─────────────────────────────────────────────────────────────────
 
 const registerBodySchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(10).max(128),
-  tenantId: z.string().uuid(),
+  tenantId: z.uuid(),
   name: z.string().min(1).max(255),
 })
 
 const loginBodySchema = z.object({
-  email: z.string().email(),
+  email: z.email(),
   password: z.string().min(1),
 })
 
