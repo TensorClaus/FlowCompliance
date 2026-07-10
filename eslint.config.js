@@ -10,8 +10,9 @@ export default tseslint.config(
     ignores: [
       '**/dist/',
       '**/node_modules/',
+      '**/.claude/**',
       '**/*.js',
-      '!eslint.config.js',
+      '**/*.cjs',
       'vitest.workspace.ts',
       '**/vitest.config.ts',
       '**/playwright.config.ts',
