@@ -11,7 +11,7 @@ export function eea1Routes(app: FastifyInstance): void {
    * GET /eea1
    *
    * List all EEA1 workforce profile declarations for the authenticated tenant.
-   * EEA1 captures race, gender, and disability across the 8 occupational levels
+   * EEA1 captures race, gender, and disability across the 7 occupational levels
    * required under rule_eea_005 of the Employment Equity Act.
    * Not yet implemented.
    */
