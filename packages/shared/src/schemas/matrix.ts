@@ -203,6 +203,10 @@ export type RemunerationMatrix = z.infer<typeof RemunerationMatrixSchema>
  * Contains remuneration composition (fixed and variable components) by occupational level and demographic categories
  * Used in EEA4 Sections D1 and D2 for remuneration structure analysis
  * Same row structure as OccupationalMatrix but with remuneration breakdown data
+ *
+ * Single-employee rule: if the linked EEA2 headcount total for an occupational
+ * level is exactly 1, the identifiable employee is captured in Section D1 only;
+ * the corresponding Section D2 row must remain zeroed and read-only.
  */
 export const RemBreakdownMatrixSchema = z.object({
   /** Top Management remuneration breakdown */
