@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { FormTypeSchema } from '../enums.js'
+import { FormTypeSchema, EEAFormStatusSchema } from '../enums.js'
 
 // ---------------------------------------------------------------------------
 // ValidationSeverity
@@ -44,7 +44,58 @@ export type RuleType = z.infer<typeof RuleTypeSchema>
  * Intra-form rules set targetForm and targetPath to null and compare
  * two paths within the same form document.
  *
- * sourcePath and targetPath use dot-notation relative to the form root, e.g.:
+ * -------------------------------------------------------------------------
+ * PATH RESOLUTION CONTRACT (authoritative — the engine MUST honour this)
+ * -------------------------------------------------------------------------
+ *
+ * Paths resolve against the REPORT PAYLOAD, not the persistence wrapper:
+ * for EEA2 the root is `EEA2Report` (see eea2.ts), for EEA4 the root is
+ * `EEA4Report` (see eea4.ts). This is why real fields such as
+ * `sectionB.*`, `linkedEEA2Id` and `status` are addressed directly with no
+ * `report.` prefix. The engine is responsible for unwrapping
+ * `EEA2Form.report` / `EEA4Form.report` before applying a path.
+ *
+ * Wildcard (`*`) expansion convention — UNAMBIGUOUS:
+ *   - The FIRST `*` in a path binds to an OCCUPATIONAL LEVEL. The level keys,
+ *     in schema row order, are the keys of OccupationalMatrixSchema /
+ *     RemunerationMatrixSchema / RemBreakdownMatrixSchema:
+ *       topManagement, seniorManagement, professionallyQualified,
+ *       skilledTechnical, semiSkilled, unskilled, totalPermanent,
+ *       temporaryEmployees, grandTotal
+ *   - The SECOND `*` in a path binds to a DEMOGRAPHIC CELL KEY. The cell keys,
+ *     in MatrixRow key order, are:
+ *       africanMale, africanFemale, colouredMale, colouredFemale,
+ *       indianMale, indianFemale, whiteMale, whiteFemale,
+ *       foreignNationalMale, foreignNationalFemale, total
+ *   - Both the source template and the target template of a rule are expanded
+ *     in lock-step: for a given (level, cell) pair the engine reads the source
+ *     value and the target value at the SAME (level, cell) coordinates and
+ *     applies ruleType. A rule with one `*` fans out over levels only.
+ *
+ * DERIVED META PROJECTION (`meta.*` paths):
+ *   Neither EEA2Report nor EEA4Report carries a `meta` object. Rules that need
+ *   workflow/lifecycle state address it through the `meta.` namespace, which
+ *   the engine MUST materialise as a `DerivedFormMeta` projection (see the
+ *   DerivedFormMeta type below) BEFORE evaluating those rules. `meta` is a
+ *   virtual, engine-computed view over real fields and prior rule results —
+ *   it is never persisted on the form document.
+ *
+ *   `meta.*` RESOLUTION SIDE: a `meta.*` path ALWAYS resolves against the
+ *   DerivedFormMeta of the SOURCE form (the form whose lifecycle is being
+ *   gated), even when it appears as a targetPath on a cross-form rule. Example:
+ *   xform:eea4-ceo-headcount-validated has targetForm 'EEA2' but its
+ *   `meta.headcountValidationPassed` target describes the EEA4's own headcount
+ *   validation result, so it is read from the EEA4 (source) projection. The
+ *   targetForm on such a rule identifies the data dependency (the linked EEA2
+ *   the headcount was validated against), not the resolution root of the
+ *   `meta.` path. Rationale: status lives on the
+ *   report as `status` (an EEAFormStatus enum), and completeness /
+ *   prior-validation flags are computed facts (section presence, results of
+ *   xform:eea2-eea4-headcount) that have no single physical field. Projecting
+ *   them into one `meta` namespace keeps the rule registry declarative and the
+ *   engine's materialisation logic in exactly one place.
+ *
+ * sourcePath and targetPath use dot-notation relative to the report root, e.g.:
  *   'sectionB.workforceProfile.topManagement.africanMale.value'
  *   'sectionC.topManagement.africanMale.headcount'
  *
@@ -124,6 +175,50 @@ export const ValidationRuleSchema = z.object({
   ruleType: RuleTypeSchema,
 })
 export type ValidationRule = z.infer<typeof ValidationRuleSchema>
+
+// ---------------------------------------------------------------------------
+// DerivedFormMeta — virtual projection addressed by `meta.*` rule paths
+// ---------------------------------------------------------------------------
+
+/**
+ * Engine-materialised projection over an EEA2Report / EEA4Report.
+ *
+ * This object is NEVER persisted on a form document. The ValidationEngine
+ * constructs it in memory immediately before evaluating any rule whose
+ * sourcePath or targetPath begins with `meta.`, and exposes it at the virtual
+ * `meta` key of the form root during path resolution.
+ *
+ * Materialisation contract (how the engine MUST compute each field):
+ *
+ *   status
+ *     Copied verbatim from the report's real `status` field
+ *     (EEA2Report.status / EEA4Report.status, an EEAFormStatus enum).
+ *     Used by xform:bundle-signed-before-dol.
+ *
+ *   priorSectionsComplete  (EEA2 only)
+ *     true iff every section preceding Section H (A–G) is present and passed
+ *     its own intra-section validation. Concretely: employerProfile, sectionB,
+ *     sectionC, sectionD, sectionE, sectionF and sectionG are all defined and
+ *     free of blocking errors. Used by xform:eea2-ceo-section-completeness.
+ *
+ *   headcountValidationPassed  (EEA4 only)
+ *     true iff the most recent evaluation of xform:eea2-eea4-headcount for this
+ *     EEA4 and its linked EEA2 produced passed === true for every expanded
+ *     cell. Used by xform:eea4-ceo-headcount-validated.
+ *
+ * Fields are optional because only the subset relevant to a given form is
+ * populated (EEA2 has no headcountValidationPassed; EEA4 has no
+ * priorSectionsComplete).
+ */
+export const DerivedFormMetaSchema = z.object({
+  /** Lifecycle status copied from the report's real `status` field. */
+  status: EEAFormStatusSchema.optional(),
+  /** EEA2: all sections A–G present and error-free (gate for signing Section H). */
+  priorSectionsComplete: z.boolean().optional(),
+  /** EEA4: xform:eea2-eea4-headcount passed for every cell against the linked EEA2. */
+  headcountValidationPassed: z.boolean().optional(),
+})
+export type DerivedFormMeta = z.infer<typeof DerivedFormMetaSchema>
 
 // ---------------------------------------------------------------------------
 // ValidationResult
@@ -261,7 +356,11 @@ export const CROSS_FORM_RULES: ValidationRule[] = [
     sourceForm: 'EEA4',
     targetForm: 'EEA2',
     sourcePath: 'linkedEEA2Id',
-    targetPath: 'formId',
+    // EEA2Report has no identity field; the linkage is to the persisted
+    // document id. This `requires` rule resolves its target against the EEA2
+    // FORM WRAPPER root (EEA2Form.id), not the report payload — the linkage /
+    // existence check needs the document identity, which lives on the wrapper.
+    targetPath: 'id',
     ruleType: 'requires',
   },
 
@@ -293,8 +392,13 @@ export const CROSS_FORM_RULES: ValidationRule[] = [
     severity: 'warning',
     sourceForm: 'EEA2',
     targetForm: null,
-    sourcePath: 'sectionB.annualTargets.*.occupationalLevel',
-    targetPath: 'sectionB.workforceProfile.*.occupationalLevel',
+    // OccupationalMatrix rows carry no `occupationalLevel` field; the level is
+    // the row KEY. Both matrices share identical fixed level keys, so the rule
+    // expresses "a target set at a level must have a workforce entry at that
+    // level" as: for each level (single `*`), annualTargets.<level>.total.value
+    // must have a corresponding workforceProfile.<level>.total.value present.
+    sourcePath: 'sectionB.annualTargets.*.total.value',
+    targetPath: 'sectionB.workforceProfile.*.total.value',
     ruleType: 'requires',
   },
 
@@ -310,8 +414,15 @@ export const CROSS_FORM_RULES: ValidationRule[] = [
     severity: 'error',
     sourceForm: 'EEA4',
     targetForm: null,
-    sourcePath: 'sectionD1.*.totalRemuneration',
-    targetPath: 'sectionD2.*.totalRemuneration',
+    // sectionD1/D2 are RemBreakdownMatrix: rows -> RemBreakdownRow ->
+    // RemBreakdownCell {fixed, variable, total}. There is NO totalRemuneration
+    // field (that name belongs to RemunerationCell in sectionC). The comparison
+    // fans out over BOTH level and demographic cell (two `*`) and compares the
+    // cell `total` (auto-calculated fixed + variable). Per-cell granularity
+    // mirrors xform:eea2-eea4-headcount and preserves transposed-data detection
+    // at the demographic level rather than only at level aggregate.
+    sourcePath: 'sectionD1.*.*.total',
+    targetPath: 'sectionD2.*.*.total',
     ruleType: 'gte',
   },
 
@@ -327,7 +438,10 @@ export const CROSS_FORM_RULES: ValidationRule[] = [
     severity: 'error',
     sourceForm: 'EEA2',
     targetForm: null,
-    sourcePath: 'sectionH.ceoSignature',
+    // EEA2 Section H IS the CEODeclaration (see eea2.ts SectionHSchema); the
+    // signature field is `signatureDataUrl`, not `ceoSignature`. `meta.` target
+    // is the DerivedFormMeta projection (see file-level JSDoc + DerivedFormMeta).
+    sourcePath: 'sectionH.signatureDataUrl',
     targetPath: 'meta.priorSectionsComplete',
     ruleType: 'requires',
   },
@@ -344,7 +458,10 @@ export const CROSS_FORM_RULES: ValidationRule[] = [
     severity: 'error',
     sourceForm: 'EEA4',
     targetForm: 'EEA2',
-    sourcePath: 'sectionE.ceoSignature',
+    // EEA4's CEO declaration lives at `declaration` (a CEODeclaration), NOT at
+    // sectionE (sectionE is the median/income-gap section). The signature field
+    // is `signatureDataUrl`. `meta.` target is the DerivedFormMeta projection.
+    sourcePath: 'declaration.signatureDataUrl',
     targetPath: 'meta.headcountValidationPassed',
     ruleType: 'requires',
   },
