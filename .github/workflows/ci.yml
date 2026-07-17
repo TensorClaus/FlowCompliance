@@ -89,6 +89,7 @@ jobs:
           NODE_ENV: test
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
           REDIS_URL: redis://localhost:6379
+          SESSION_SECRET: ci-test-session-secret-must-be-at-least-32-chars
 
       - name: Test (web)
         run: pnpm --filter @simplifi/web test:coverage
