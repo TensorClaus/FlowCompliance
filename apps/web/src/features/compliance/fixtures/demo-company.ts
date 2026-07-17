@@ -1,3 +1,18 @@
+/**
+ * DEMO-ONLY FIXTURE DATA.
+ *
+ * Every value exported from this file (workforce headcounts, remuneration,
+ * Gini series, actions, deadlines) is synthetic data for the M2.5 compliance
+ * dashboards' static frontend development. It does not represent any real
+ * tenant, employee, or payroll figure and must never be treated as a
+ * compliance source of truth.
+ *
+ * A live-data path exists in `../lib/live-data-adapter.ts` (`adaptWorkforce`,
+ * `adaptRemuneration`, `useComplianceData`) that maps real EEA2/EEA4
+ * `@simplifi/shared` matrices onto these same sub-shapes. Do not edit the
+ * values below to "fix" a dashboard — extend the adapter instead.
+ */
+
 import type { OccupationalLevel, SectorCode } from '@simplifi/shared'
 
 export interface GenderSplit {
@@ -199,7 +214,7 @@ const WORKFORCE: LevelHeadcount[] = [
 export const DEMO_COMPANY: DemoCompany = {
   name: 'Thandela Retail Group (Pty) Ltd',
   registrationNumber: '2014/187234/07',
-  sectorCode: 'retail_wholesale',
+  sectorCode: 'wholesale_retail_trade',
   sectorName: 'Wholesale and Retail Trade',
   province: 'Gauteng',
   annualTurnoverZar: 86_400_000,

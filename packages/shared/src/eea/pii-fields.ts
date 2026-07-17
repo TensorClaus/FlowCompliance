@@ -69,4 +69,8 @@ export const PII_FIELD_PATHS: readonly string[] = [
   'sectionD.totalRemuneration',
   'sectionD.remunerationAmount',
   'sectionD.incomeAmount',
+
+  // POPIA: EEA4 D1/D2 rows identify highest-/lowest-paid individuals per level.
+  'report.sectionD1.*',
+  'report.sectionD2.*',
 ]

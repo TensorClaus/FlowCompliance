@@ -10,15 +10,12 @@ import {
 } from '../lib/representation'
 
 const GROUP_LABELS: Record<GroupKey, string> = {
-  african: 'African',
-  coloured: 'Coloured',
-  indian: 'Indian/Asian',
-  white: 'White',
-  female: 'Female',
+  designatedMale: 'Designated male',
+  designatedFemale: 'Designated female',
   disabled: 'Disability',
 }
 
-const GROUP_ORDER: GroupKey[] = ['african', 'coloured', 'indian', 'white', 'female', 'disabled']
+const GROUP_ORDER: GroupKey[] = ['designatedMale', 'designatedFemale', 'disabled']
 
 const BAR_FILL: Record<GapStatus, string> = {
   met: 'bg-emerald-500',
@@ -77,13 +74,16 @@ export interface SectorTargetBoardProps {
 export function SectorTargetBoard({ now = new Date() }: SectorTargetBoardProps) {
   const company = DEMO_COMPANY
   const { levels } = computeSectorCompliance(company)
+  // GN 6124 sets numerical targets only for the top four occupational levels;
+  // levels 5-7 carry no gazetted target and are excluded from this board.
+  const gazettedLevels = levels.filter((l) => l.groups.length > 0)
 
   const cycleEnd = new Date(company.eepCycleEnd)
   const monthsRemaining = Math.max(
     0,
     (cycleEnd.getFullYear() - now.getFullYear()) * 12 + (cycleEnd.getMonth() - now.getMonth()),
   )
-  const levelsOnTrack = levels.filter((l) => l.status === 'met').length
+  const levelsOnTrack = gazettedLevels.filter((l) => l.status === 'met').length
 
   return (
     <div className="mx-auto max-w-5xl space-y-6">
@@ -114,12 +114,12 @@ export function SectorTargetBoard({ now = new Date() }: SectorTargetBoardProps) 
           {cycleEnd.toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' })}
         </p>
         <p className="text-sm tabular-nums text-slate-300">
-          {levelsOnTrack}/{levels.length} levels on target
+          {levelsOnTrack}/{gazettedLevels.length} levels on target
         </p>
       </div>
 
       <div className="space-y-4">
-        {levels.map((lvl) => {
+        {gazettedLevels.map((lvl) => {
           const badge = STATUS_BADGE[lvl.status]
           return (
             <section

@@ -176,8 +176,13 @@ export {
 } from './schemas/eea14.js'
 
 // EEA4 — Income Differential Statement
-export type { RemunerationGapRange, EEA4Report, EEA4Form } from './schemas/eea4.js'
-export { RemunerationGapRangeSchema, EEA4ReportSchema, EEA4FormSchema } from './schemas/eea4.js'
+export type { RemunerationGapRange, SectionE, EEA4Report, EEA4Form } from './schemas/eea4.js'
+export {
+  RemunerationGapRangeSchema,
+  SectionESchema,
+  EEA4ReportSchema,
+  EEA4FormSchema,
+} from './schemas/eea4.js'
 
 // Event sourcing — events
 export {
@@ -220,6 +225,7 @@ export {
   OCCUPATIONAL_LEVEL_LABELS,
   getSectorTarget,
   getSectorTargetByLevel,
+  targetLevelForOccupationalLevel,
 } from './data/sector-targets.js'
 
 // Shared constants — canonical reference data for EEA domain
@@ -241,6 +247,7 @@ export {
 // EAP reference data — StatsSA QLFS
 // Note: EapProvince replaces Province to avoid collision with enums.js Province.
 export {
+  EAP_DATASET_VERSION,
   PROVINCES,
   type EapProvince,
   type EapDataPoint,
@@ -268,3 +275,17 @@ export {
   type ValidationReport,
   CROSS_FORM_RULES,
 } from './schemas/validation-rules.js'
+
+export { evaluateRules, EngineError } from './validation/engine.js'
+export {
+  TARGET_BELOW_EFFECTIVE_MINIMUM_MESSAGE,
+  TIMEFRAME_ONGOING_MESSAGE,
+  MEASURES_EMPTY_MESSAGE,
+  validateGoalAgainstMinimums,
+  type GoalMinimumBinding,
+  type GoalViolation,
+  type GoalMinimumValidationResult,
+  type TargetBelowEffectiveMinimumViolation,
+  type TimeframeOngoingViolation,
+  type MeasuresEmptyViolation,
+} from './validation/eea13-goals.js'

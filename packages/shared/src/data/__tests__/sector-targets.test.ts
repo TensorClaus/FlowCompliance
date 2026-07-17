@@ -7,6 +7,7 @@ import {
   OCCUPATIONAL_LEVEL_LABELS,
   getSectorTarget,
   getSectorTargetByLevel,
+  targetLevelForOccupationalLevel,
 } from '../sector-targets.js'
 import type { SectorCode, TargetOccupationalLevel, SectorTargetLevel } from '../sector-targets.js'
 
@@ -174,6 +175,25 @@ describe('getSectorTargetByLevel', () => {
       'top_management' as TargetOccupationalLevel,
     )
     expect(result).toBeUndefined()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// targetLevelForOccupationalLevel — 7-level workforce -> 4-level target scope
+// ---------------------------------------------------------------------------
+
+describe('targetLevelForOccupationalLevel', () => {
+  it('maps the top four workforce levels onto the gazetted target levels', () => {
+    expect(targetLevelForOccupationalLevel(1)).toBe('top_management')
+    expect(targetLevelForOccupationalLevel(2)).toBe('senior_management')
+    expect(targetLevelForOccupationalLevel(3)).toBe('professionally_qualified_middle_management')
+    expect(targetLevelForOccupationalLevel(4)).toBe('skilled_technical')
+  })
+
+  it('returns undefined for levels 5-7 (no gazetted target)', () => {
+    expect(targetLevelForOccupationalLevel(5)).toBeUndefined()
+    expect(targetLevelForOccupationalLevel(6)).toBeUndefined()
+    expect(targetLevelForOccupationalLevel(7)).toBeUndefined()
   })
 })
 

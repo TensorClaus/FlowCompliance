@@ -1,0 +1,40 @@
+flowchart TB
+    subgraph client["Browser (tenant user)"]
+        ui["React SPA<br/>TanStack Router"]
+    end
+
+    subgraph compose["Docker Compose network"]
+        direction TB
+
+        web["web — :5173<br/>Vite dev / static SPA<br/>VITE_API_URL → api"]
+
+        subgraph apiSvc["api — :3001 (Fastify 4)"]
+            fastify["HTTP layer<br/>helmet · cors · rate-limit"]
+            auth["Better-Auth<br/>session + TOTP (otpauth)"]
+            rls["Prisma 7 + adapter-pg<br/>sets app.tenant_id per request"]
+            worker["BullMQ worker<br/>reminders / async jobs"]
+        end
+
+        pg[("postgres:16-alpine — :5432<br/>simplifi_dev<br/>FORCE ROW LEVEL SECURITY<br/>volume: pg_data")]
+        redis[("redis:7-alpine — :6379<br/>BullMQ queues<br/>volume: redis_data")]
+    end
+
+    subgraph aws["AWS (external)"]
+        kms["KMS<br/>per-tenant CMK (kmsKeyId)<br/>AES-256 PII envelope encryption"]
+        bedrock["Bedrock Runtime<br/>+ Anthropic SDK"]
+    end
+
+    ui -->|HTTPS| web
+    ui -->|"REST /api (JWT + refresh cookie)"| fastify
+    fastify --> auth --> rls
+    rls -->|"SQL (tenant-scoped session var)"| pg
+    auth -->|sessions table| pg
+    worker -->|jobs| redis
+    fastify -->|enqueue| redis
+    rls -.->|"encrypt/decrypt EEA1 PII"| kms
+    apiSvc -.->|compliance assist| bedrock
+
+    classDef db fill:#1e3a5f,stroke:#4a90d9,color:#fff;
+    classDef ext fill:#3d2c1e,stroke:#d99a4a,color:#fff;
+    class pg,redis db;
+    class kms,bedrock ext;

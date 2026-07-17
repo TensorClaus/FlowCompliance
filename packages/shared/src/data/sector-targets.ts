@@ -588,3 +588,36 @@ export function getSectorTargetByLevel(
   if (!sector) return undefined
   return sector.targets[level]
 }
+
+/**
+ * Map a 7-level workforce OccupationalLevel onto the GN 6124 target-setting
+ * scope.
+ *
+ * GN 6124 sets targets only for the top four occupational levels; the other
+ * levels have no gazetted minimum. Semi-Skilled, Unskilled and Non-Permanent
+ * (levels 5-7) therefore map to undefined and callers must treat them as
+ * having no sectoral floor (falling back to the EAP benchmark).
+ *
+ *   1 -> top_management
+ *   2 -> senior_management
+ *   3 -> professionally_qualified_middle_management
+ *   4 -> skilled_technical
+ *   5 | 6 | 7 -> undefined
+ *
+ * @param level - Workforce OccupationalLevel (1-7).
+ * @returns The matching TargetOccupationalLevel, or undefined for levels 5-7.
+ */
+const TARGET_LEVEL_BY_OCCUPATIONAL_LEVEL: Readonly<
+  Partial<Record<OccupationalLevel, TargetOccupationalLevel>>
+> = {
+  1: 'top_management',
+  2: 'senior_management',
+  3: 'professionally_qualified_middle_management',
+  4: 'skilled_technical',
+}
+
+export function targetLevelForOccupationalLevel(
+  level: OccupationalLevel,
+): TargetOccupationalLevel | undefined {
+  return TARGET_LEVEL_BY_OCCUPATIONAL_LEVEL[level]
+}

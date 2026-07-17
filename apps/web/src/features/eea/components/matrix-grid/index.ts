@@ -1,0 +1,6 @@
+export { MatrixGrid, type GridColumn, type GridRow, type MatrixGridProps } from './MatrixGrid'
+export { computeGridTotals, type GridTotalsConfig } from './compute-totals'
+export type { CellAdapter, CellRenderContext, MatrixGridMode, PasteWarning } from './types'
+export { singleValueCellAdapter } from './adapters/single-value-cell-adapter'
+export { remunerationCellAdapter } from './adapters/remuneration-cell-adapter'
+export { remBreakdownCellAdapter } from './adapters/rem-breakdown-cell-adapter'
