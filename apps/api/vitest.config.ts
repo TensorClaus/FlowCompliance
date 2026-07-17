@@ -8,6 +8,9 @@ export default defineConfig({
     // Integration suites build the full app + hit the service DB in their
     // beforeAll hooks; cold CI runners need more than the 10s default.
     hookTimeout: 30_000,
+    // The suites share one database and several truncate tables in cleanup;
+    // parallel files corrupt each other's fixtures (FK violations on tenants).
+    fileParallelism: false,
     env: {
       // CI provides its own service credentials; the literals are local-dev defaults.
       DATABASE_URL:

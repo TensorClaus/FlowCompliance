@@ -83,11 +83,21 @@ jobs:
         env:
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
 
+      # The RLS policies target the simplifi_app role (created by the RLS
+      # migration); the bootstrap `ci` user is a superuser and would bypass
+      # them, so the api tests must connect as simplifi_app. TRUNCATE is
+      # needed by test cleanup and is not part of the migration's grants.
+      - name: Prepare RLS test role
+        run: |
+          PGPASSWORD=ci psql -h localhost -U ci -d ci_test \
+            -c "ALTER ROLE simplifi_app LOGIN PASSWORD 'ci';" \
+            -c "GRANT TRUNCATE ON ALL TABLES IN SCHEMA public TO simplifi_app;"
+
       - name: Test (api)
         run: pnpm --filter @simplifi/api test:coverage
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+          DATABASE_URL: postgresql://simplifi_app:ci@localhost:5432/ci_test
           REDIS_URL: redis://localhost:6379
           SESSION_SECRET: ci-test-session-secret-must-be-at-least-32-chars
 
