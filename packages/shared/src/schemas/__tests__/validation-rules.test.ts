@@ -4,7 +4,12 @@ import { EEA4FormSchema, EEA4ReportSchema } from '../eea4.js'
 import {
   CROSS_FORM_RULES,
   DerivedFormMetaSchema,
+  RuleTypeSchema,
   type DerivedFormMeta,
+  ValidationReportSchema,
+  ValidationResultSchema,
+  ValidationRuleSchema,
+  ValidationSeveritySchema,
 } from '../validation-rules.js'
 
 // ---------------------------------------------------------------------------
@@ -306,4 +311,124 @@ describe('CROSS_FORM_RULES path resolution', () => {
       })
     })
   }
+})
+
+// ---------------------------------------------------------------------------
+// Standalone rule/result/report schemas (independent of the CROSS_FORM_RULES
+// registry data above)
+// ---------------------------------------------------------------------------
+
+describe('ValidationSeveritySchema', () => {
+  it('accepts error, warning and info', () => {
+    for (const severity of ['error', 'warning', 'info']) {
+      expect(ValidationSeveritySchema.safeParse(severity).success).toBe(true)
+    }
+  })
+
+  it('rejects an undocumented severity', () => {
+    expect(ValidationSeveritySchema.safeParse('critical').success).toBe(false)
+  })
+})
+
+describe('RuleTypeSchema', () => {
+  it('accepts exactly the five documented comparison operators', () => {
+    const ruleTypes = ['equality', 'lte', 'gte', 'requires', 'bundle']
+    for (const ruleType of ruleTypes) {
+      expect(RuleTypeSchema.safeParse(ruleType).success).toBe(true)
+    }
+  })
+
+  it('rejects an undocumented operator', () => {
+    expect(RuleTypeSchema.safeParse('gt').success).toBe(false)
+  })
+})
+
+describe('ValidationRuleSchema', () => {
+  it('accepts every registered CROSS_FORM_RULES entry (the registry is itself schema-valid)', () => {
+    for (const rule of CROSS_FORM_RULES) {
+      expect(ValidationRuleSchema.safeParse(rule).success).toBe(true)
+    }
+  })
+
+  it('rejects a rule with an empty ruleId', () => {
+    const rule = { ...CROSS_FORM_RULES[0], ruleId: '' }
+    expect(ValidationRuleSchema.safeParse(rule).success).toBe(false)
+  })
+
+  it('accepts targetForm: null for an intra-form rule', () => {
+    const intraFormRule = CROSS_FORM_RULES.find((rule) => rule.targetForm === null)
+    expect(intraFormRule).toBeDefined()
+    expect(ValidationRuleSchema.safeParse(intraFormRule).success).toBe(true)
+  })
+})
+
+function validationResult(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    ruleId: 'xform:eea2-eea4-headcount',
+    passed: true,
+    severity: 'error',
+    message: 'EEA2/EEA4 Headcount Consistency passed for sectionB.workforceProfile.',
+    sourcePath: 'sectionB.workforceProfile.topManagement.africanMale.value',
+    targetPath: 'sectionC.topManagement.africanMale.headcount',
+    timestamp: '2025-10-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+describe('ValidationResultSchema', () => {
+  it('accepts a passing result with sourceValue/targetValue omitted (both optional)', () => {
+    expect(ValidationResultSchema.safeParse(validationResult()).success).toBe(true)
+  })
+
+  it('accepts arbitrary sourceValue/targetValue shapes (unknown by design)', () => {
+    const result = ValidationResultSchema.safeParse(
+      validationResult({ sourceValue: { value: 5 }, targetValue: 5 }),
+    )
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects an empty message', () => {
+    expect(ValidationResultSchema.safeParse(validationResult({ message: '' })).success).toBe(false)
+  })
+
+  it('accepts a null targetPath for an intra-form result', () => {
+    const result = ValidationResultSchema.safeParse(validationResult({ targetPath: null }))
+    expect(result.success).toBe(true)
+  })
+})
+
+function validationReport(overrides: Partial<Record<string, unknown>> = {}) {
+  return {
+    reportId: 'report-001',
+    sourceFormId: 'form-eea2-001',
+    targetFormId: 'form-eea4-001',
+    rules: [],
+    allPassed: true,
+    errorCount: 0,
+    warningCount: 0,
+    generatedAt: '2025-10-01T00:00:00Z',
+    ...overrides,
+  }
+}
+
+describe('ValidationReportSchema', () => {
+  it('accepts a fully-passing report with an empty rules array', () => {
+    expect(ValidationReportSchema.safeParse(validationReport()).success).toBe(true)
+  })
+
+  it('accepts targetFormId: null for an intra-form-only report', () => {
+    const result = ValidationReportSchema.safeParse(validationReport({ targetFormId: null }))
+    expect(result.success).toBe(true)
+  })
+
+  it('rejects a negative errorCount', () => {
+    expect(ValidationReportSchema.safeParse(validationReport({ errorCount: -1 })).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects a non-integer warningCount', () => {
+    const result = ValidationReportSchema.safeParse(validationReport({ warningCount: 1.5 }))
+    expect(result.success).toBe(false)
+  })
 })

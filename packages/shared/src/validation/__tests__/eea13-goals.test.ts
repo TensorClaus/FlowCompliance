@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { NumericalGoal, SectorCode } from '../../index.js'
-import { validateGoalAgainstMinimums } from '../eea13-goals.js'
+import {
+  MEASURES_EMPTY_MESSAGE,
+  TARGET_BELOW_EFFECTIVE_MINIMUM_MESSAGE,
+  TIMEFRAME_ONGOING_MESSAGE,
+  validateGoalAgainstMinimums,
+} from '../eea13-goals.js'
 
 function goal(overrides: Partial<NumericalGoal> = {}): NumericalGoal {
   return {
@@ -38,9 +43,9 @@ describe('validateGoalAgainstMinimums', () => {
         eapBenchmark: 40,
         sectoralTarget: 49.8,
         effectiveMinimum: 49.8,
+        message: TARGET_BELOW_EFFECTIVE_MINIMUM_MESSAGE,
       }),
     ])
-    expect(result.violations[0]?.message).not.toMatch(/\d/)
   })
 
   it('binds to EAP when EAP exceeds the GN 6124 gender target', () => {
@@ -60,8 +65,8 @@ describe('validateGoalAgainstMinimums', () => {
       eapBenchmark: 30,
       sectoralTarget: 20.8,
       effectiveMinimum: 30,
+      message: TARGET_BELOW_EFFECTIVE_MINIMUM_MESSAGE,
     })
-    expect(result.violations[0]?.message).not.toMatch(/\d/)
   })
 
   it('uses EAP only for a race-coded goal (gazette sets no per-race target)', () => {
@@ -135,6 +140,7 @@ describe('validateGoalAgainstMinimums', () => {
         code: 'TIMEFRAME_ONGOING',
         severity: 'error',
         fieldPath: ['timeframe'],
+        message: TIMEFRAME_ONGOING_MESSAGE,
       }),
     )
   })
@@ -150,6 +156,7 @@ describe('validateGoalAgainstMinimums', () => {
         code: 'MEASURES_EMPTY',
         severity: 'error',
         fieldPath: ['measures'],
+        message: MEASURES_EMPTY_MESSAGE,
       }),
     )
   })
