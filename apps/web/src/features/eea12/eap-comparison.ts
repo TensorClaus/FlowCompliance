@@ -3,9 +3,10 @@ import {
   GN6124_VERSION,
   getEapByProvinceAndLevel,
   getSectorTargetByLevel,
+  targetLevelForOccupationalLevel,
   type EapProvince,
   type EapComparisonRow,
-  type DesignatedGroupTarget,
+  type SectorTargetLevel,
   type OccupationalLevel,
   type SectorCode,
   type WorkforceProfileRow,
@@ -86,11 +87,12 @@ export interface EapComparisonRowContext {
    */
   readonly citizenHeadcount: number
   /**
-   * GN 6124 designated-group targets for this level (display baseline only,
-   * NOT part of gapPct). Undefined when no sectorCode was supplied or the
-   * sector has no entry for this level.
+   * GN 6124 designated-group gender targets for this level (display baseline
+   * only, NOT part of gapPct). Undefined when no sectorCode was supplied, or
+   * when the level falls outside GN 6124's gazetted top-four target scope
+   * (levels 5-7 have no gazetted target).
    */
-  readonly sectorTarget?: DesignatedGroupTarget
+  readonly sectorTarget?: SectorTargetLevel
 }
 
 export interface EapComparisonResult {
@@ -203,8 +205,11 @@ export function buildEapComparison(
       gapPct,
     })
 
+    const targetLevel = targetLevelForOccupationalLevel(level)
     const sectorTarget =
-      opts.sectorCode === undefined ? undefined : getSectorTargetByLevel(opts.sectorCode, level)
+      opts.sectorCode === undefined || targetLevel === undefined
+        ? undefined
+        : getSectorTargetByLevel(opts.sectorCode, targetLevel)
 
     context.push({
       occupationalLevel: level,

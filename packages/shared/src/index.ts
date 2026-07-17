@@ -217,12 +217,15 @@ export {
   GN6124_VERSION,
   SECTOR_CODES,
   type SectorCode,
-  type DesignatedGroupTarget,
+  TARGET_OCCUPATIONAL_LEVELS,
+  type TargetOccupationalLevel,
+  type SectorTargetLevel,
   type SectorTarget,
   SECTOR_TARGETS,
   OCCUPATIONAL_LEVEL_LABELS,
   getSectorTarget,
   getSectorTargetByLevel,
+  targetLevelForOccupationalLevel,
 } from './data/sector-targets.js'
 
 // Shared constants — canonical reference data for EEA domain

@@ -1,6 +1,6 @@
 import {
   getSectorTargetByLevel,
-  type DesignatedGroupTarget,
+  targetLevelForOccupationalLevel,
   type SectorCode,
 } from '../data/sector-targets.js'
 import type { NumericalGoal } from '../schemas/eea13.js'
@@ -52,21 +52,31 @@ export type GoalMinimumValidationResult = {
   violations: GoalViolation[]
 }
 
-const SECTOR_TARGET_FIELD_BY_GROUP: Readonly<
-  Record<NumericalGoal['designatedGroup'], keyof DesignatedGroupTarget>
-> = {
-  A: 'african',
-  C: 'coloured',
-  I: 'indian',
-  W: 'white',
-  M: 'male',
-  F: 'female',
-}
-
+/**
+ * Resolve the GN 6124 sectoral minimum percentage for a goal, or undefined
+ * when the gazette sets no target for that combination (EAP-only branch).
+ *
+ * GN 6124 gazettes targets only for the top four occupational levels, and
+ * only as designated-group aggregates split by GENDER — never by race. So a
+ * sectoral floor exists only when BOTH of these hold:
+ *
+ *   1. targetLevelForOccupationalLevel(level) is defined (levels 1-4);
+ *      levels 5-7 have no gazetted target.
+ *   2. the goal targets a gender group: 'M' -> designatedGroupMale,
+ *      'F' -> designatedGroupFemale.
+ *
+ * Race-coded goals ('A' | 'C' | 'I' | 'W') fall through to the EAP-only
+ * branch: the gazette sets designated-group-by-gender aggregates, not
+ * per-race targets, so a race goal has no sectoral floor and binds to EAP.
+ */
 function getSectoralTarget(goal: NumericalGoal, sectorCode: SectorCode): number | undefined {
-  const targets = getSectorTargetByLevel(sectorCode, goal.occupationalLevel)
-  if (targets === undefined) return undefined
-  return targets[SECTOR_TARGET_FIELD_BY_GROUP[goal.designatedGroup]]
+  const levelKey = targetLevelForOccupationalLevel(goal.occupationalLevel)
+  if (levelKey === undefined) return undefined
+  const target = getSectorTargetByLevel(sectorCode, levelKey)
+  if (target === undefined) return undefined
+  if (goal.designatedGroup === 'M') return target.designatedGroupMale
+  if (goal.designatedGroup === 'F') return target.designatedGroupFemale
+  return undefined
 }
 
 export function validateGoalAgainstMinimums(

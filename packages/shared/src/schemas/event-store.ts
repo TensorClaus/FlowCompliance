@@ -56,7 +56,7 @@ export const EventStreamSchema = z.object({
   /**
    * Globally unique stream identifier. UUID v4. One stream exists per formId.
    */
-  streamId: z.string().uuid(),
+  streamId: z.uuid(),
 
   /**
    * Tenant (employer) identifier. All streams are strictly scoped to a single
@@ -75,7 +75,7 @@ export const EventStreamSchema = z.object({
    * The combination (tenantId, formType, reportingPeriod) is unique, but
    * formId is the canonical cross-service reference key.
    */
-  formId: z.string().uuid(),
+  formId: z.uuid(),
 
   /**
    * Ordered, immutable list of all events in this stream, sorted by
@@ -135,7 +135,7 @@ export const ProjectionSchema = z.object({
   /**
    * Globally unique projection identifier. UUID v4.
    */
-  projectionId: z.string().uuid(),
+  projectionId: z.uuid(),
 
   /**
    * Tenant (employer) identifier. Mirrors the EventStream tenantId.
@@ -152,7 +152,7 @@ export const ProjectionSchema = z.object({
    * UUID of the form instance this projection materialises. Matches
    * EventStream.formId for the same form.
    */
-  formId: z.string().uuid(),
+  formId: z.uuid(),
 
   /**
    * The full materialised form state produced by replaying all events up to
@@ -177,7 +177,7 @@ export const ProjectionSchema = z.object({
    * built. Used to determine the replay start point for incremental rebuilds
    * and to set the stale flag when new events are appended beyond this point.
    */
-  builtFromEventId: z.string().uuid(),
+  builtFromEventId: z.uuid(),
 
   /**
    * UTC timestamp of when this projection was most recently rebuilt.
@@ -232,7 +232,7 @@ export const SnapshotSchema = z.object({
   /**
    * Globally unique snapshot identifier. UUID v4.
    */
-  snapshotId: z.string().uuid(),
+  snapshotId: z.uuid(),
 
   /**
    * Tenant (employer) identifier. All snapshots are strictly tenant-scoped.
@@ -249,7 +249,7 @@ export const SnapshotSchema = z.object({
    * UUID of the form instance this snapshot captures. Matches
    * EventStream.formId and Projection.formId for the same form.
    */
-  formId: z.string().uuid(),
+  formId: z.uuid(),
 
   /**
    * The full form state at the point in time represented by snapshotAt.
@@ -280,7 +280,7 @@ export const SnapshotSchema = z.object({
    * state. Combined with eventVersion, this provides a precise anchor into
    * the event stream for future forensic replay.
    */
-  lastEventId: z.string().uuid(),
+  lastEventId: z.uuid(),
 
   /**
    * Controlled vocabulary describing why this snapshot was taken.
@@ -340,7 +340,7 @@ export const AppendResultSchema = z.object({
   /**
    * The eventId of the event that was just appended. Matches EEAEvent.eventId.
    */
-  eventId: z.string().uuid(),
+  eventId: z.uuid(),
 
   /**
    * The EventStream.version after the append. Callers should use this value
@@ -384,7 +384,7 @@ export const ReplayRequestSchema = z.object({
   /**
    * UUID of the form whose event stream should be replayed.
    */
-  formId: z.string().uuid(),
+  formId: z.uuid(),
 
   /**
    * Replay events with timestamp up to and (by default) including this

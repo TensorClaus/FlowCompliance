@@ -214,7 +214,7 @@ const WORKFORCE: LevelHeadcount[] = [
 export const DEMO_COMPANY: DemoCompany = {
   name: 'Thandela Retail Group (Pty) Ltd',
   registrationNumber: '2014/187234/07',
-  sectorCode: 'retail_wholesale',
+  sectorCode: 'wholesale_retail_trade',
   sectorName: 'Wholesale and Retail Trade',
   province: 'Gauteng',
   annualTurnoverZar: 86_400_000,

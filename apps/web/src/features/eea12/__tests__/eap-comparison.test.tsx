@@ -2,6 +2,7 @@ import {
   EAP_DATASET_VERSION,
   GN6124_VERSION,
   getSectorTargetByLevel,
+  targetLevelForOccupationalLevel,
   type EapProvince,
   type OccupationalLevel,
   type WorkforceProfile,
@@ -151,13 +152,28 @@ describe('buildEapComparison — province resolution', () => {
 })
 
 describe('buildEapComparison — sector target (display only)', () => {
-  it('carries the GN 6124 sector target per level when a sectorCode is supplied', () => {
+  it('carries the GN 6124 sector target for the gazetted levels only', () => {
     const result = buildEapComparison(FIXTURE_ROWS, 'National', {
       sectorCode: 'finance_insurance',
     })
     for (const level of [1, 2, 3, 4, 5, 6, 7] as OccupationalLevel[]) {
       const ctx = mustFind(result.context.find((c) => c.occupationalLevel === level))
-      expect(ctx.sectorTarget).toEqual(getSectorTargetByLevel('finance_insurance', level))
+      const targetLevel = targetLevelForOccupationalLevel(level)
+      const expected =
+        targetLevel === undefined
+          ? undefined
+          : getSectorTargetByLevel('finance_insurance', targetLevel)
+      expect(ctx.sectorTarget).toEqual(expected)
+    }
+  })
+
+  it('carries no sector target for levels outside the gazetted top four', () => {
+    const result = buildEapComparison(FIXTURE_ROWS, 'National', {
+      sectorCode: 'finance_insurance',
+    })
+    for (const level of [5, 6, 7] as OccupationalLevel[]) {
+      const ctx = mustFind(result.context.find((c) => c.occupationalLevel === level))
+      expect(ctx.sectorTarget).toBeUndefined()
     }
   })
 
@@ -293,11 +309,12 @@ describe('EEA12SectionC — sector target column', () => {
     expect(versionBadge).toHaveTextContent(GN6124_VERSION)
   })
 
-  it('renders the sector target value when a sectorCode is supplied', () => {
+  it('renders the designated-group male and female targets when a sectorCode is supplied', () => {
     renderSectionC({ rows: FIXTURE_ROWS, province: 'National', sectorCode: 'finance_insurance' })
-    const target = mustFind(getSectorTargetByLevel('finance_insurance', 1))
+    const target = mustFind(getSectorTargetByLevel('finance_insurance', 'top_management'))
     const sectorCell = screen.getByTestId('eea12-eap-sector-1')
-    expect(sectorCell).toHaveTextContent(`${target.african.toFixed(1)}%`)
+    expect(sectorCell).toHaveTextContent(`${target.designatedGroupMale.toFixed(1)}%`)
+    expect(sectorCell).toHaveTextContent(`${target.designatedGroupFemale.toFixed(1)}%`)
   })
 
   it('renders a placeholder when no sectorCode is supplied', () => {

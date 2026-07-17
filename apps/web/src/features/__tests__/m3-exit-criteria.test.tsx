@@ -11,7 +11,6 @@ import {
   type RemBreakdownRow,
   type RemunerationMatrix,
   type RemunerationRow,
-  type SectorCode,
 } from '@simplifi/shared'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -324,7 +323,7 @@ function readBarrierState(): {
 }
 
 const yearlyPlanSetup = {
-  sectorCode: 'agriculture',
+  sectorCode: 'agriculture_forestry_fishing',
   planPeriod: { startDate: '2025-01-01', endDate: '2030-01-01' },
   consultation: {
     consultedWithEmployees: true,
@@ -568,18 +567,21 @@ describe('BARRIER FLOW', () => {
 describe('SECTORAL MINIMUM', () => {
   it('binds to sectoral floors in validation and the goal editor', async () => {
     const user = userEvent.setup()
+    // agriculture_forestry_fishing skilled_technical (level 4) designated
+    // female target is the gazetted 44%; an EAP benchmark of 40 sits below it,
+    // so the sectoral floor binds.
     const below = validateGoalAgainstMinimums(
       {
-        occupationalLevel: 1,
-        designatedGroup: 'A',
+        occupationalLevel: 4,
+        designatedGroup: 'F',
         currentRepresentation: 20,
-        target: 57,
-        eapBenchmark: 55,
+        target: 43,
+        eapBenchmark: 40,
         timeframe: 'By 31 December 2029',
         targetDate: '2029-12-31',
         measures: ['Targeted recruitment'],
       },
-      'agriculture',
+      'agriculture_forestry_fishing',
     )
     expect(below.binding).toBe('sectoral')
     expect(below.violations[0]).toEqual(
@@ -587,20 +589,27 @@ describe('SECTORAL MINIMUM', () => {
     )
 
     renderYearlyPlans()
+    // Select a gender group + gazetted level that carries a sectoral floor
+    // above the EAP benchmark (level 4, designated female → 44%).
+    await user.selectOptions(screen.getByTestId('eea13-goal-group-1'), 'F')
+    await user.selectOptions(screen.getByTestId('eea13-goal-level-1'), '4')
     await makeFirstGoalReady(user)
     await user.clear(screen.getByTestId('eea13-goal-target-1'))
-    await user.type(screen.getByTestId('eea13-goal-target-1'), '57')
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '43')
 
     expect(screen.getByTestId('eea13-goal-binding-sectoral-1')).toBeInTheDocument()
     expect(screen.getByTestId('eea13-goal-target-error-1')).toHaveTextContent('sectoral baseline')
     expect(screen.getByTestId('eea13-goal-save-1')).toBeDisabled()
 
     await user.clear(screen.getByTestId('eea13-goal-target-1'))
-    await user.type(screen.getByTestId('eea13-goal-target-1'), '58')
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '44')
     expect(screen.getByTestId('eea13-goal-save-1')).toBeEnabled()
   })
 
   it('falls back to EAP when no sectoral target exists for the selected combination', () => {
+    // Race-coded goals have no gazetted sectoral floor (GN 6124 sets
+    // designated-group-by-gender aggregates, not per-race targets), so even a
+    // gazetted sector falls back to the EAP benchmark.
     const result = validateGoalAgainstMinimums(
       {
         occupationalLevel: 1,
@@ -612,12 +621,12 @@ describe('SECTORAL MINIMUM', () => {
         targetDate: '2029-12-31',
         measures: ['Targeted recruitment'],
       },
-      'missing_sector' as SectorCode,
+      'agriculture_forestry_fishing',
     )
     expect(result.binding).toBe('eap')
     expect(result.sectoralTarget).toBeUndefined()
 
-    renderYearlyPlans({ sectorCode: 'missing_sector' })
+    renderYearlyPlans()
     expect(screen.getByTestId('eea13-goal-no-sectoral-target-1')).toHaveTextContent(
       'No GN 6124 target for this combination',
     )

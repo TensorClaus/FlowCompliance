@@ -83,7 +83,7 @@ describe('EEA13Form — sector gate', () => {
     renderForm()
 
     const select = screen.getByTestId('eea13-sector-select')
-    await user.selectOptions(select, 'agriculture')
+    await user.selectOptions(select, 'agriculture_forestry_fishing')
 
     const stepButton = screen.getByRole('button', { name: /step 3/i })
     expect(stepButton).not.toBeDisabled()

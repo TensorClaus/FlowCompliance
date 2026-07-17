@@ -258,7 +258,7 @@ export function ComplianceDashboard({ now = new Date() }: ComplianceDashboardPro
             <ol className="mt-3 space-y-0 rounded-lg border border-slate-200 bg-white shadow-sm">
               {upcomingDeadlines.map((deadline, i) => (
                 <li
-                  key={deadline.date}
+                  key={`${deadline.date}-${deadline.label}`}
                   className={clsx(
                     'flex items-baseline gap-3 px-3 py-2.5',
                     i > 0 && 'border-t border-slate-100',

@@ -193,7 +193,7 @@ export function EEA12SectionC({
             {comparison.rows.map((row) => {
               const ctx = contextByLevel.get(row.occupationalLevel)
               const status: GapStatus = ctx?.status ?? 'met'
-              const sectorAfrican = ctx?.sectorTarget?.african
+              const sectorTarget = ctx?.sectorTarget
               return (
                 <tr
                   className="border-b border-slate-100"
@@ -238,7 +238,23 @@ export function EEA12SectionC({
                     className="px-3 py-2 text-right tabular-nums text-slate-800"
                     data-testid={`eea12-eap-sector-${String(row.occupationalLevel)}`}
                   >
-                    {sectorAfrican === undefined ? '—' : formatPct(sectorAfrican)}
+                    {sectorTarget === undefined ? (
+                      '—'
+                    ) : (
+                      <span>
+                        <span
+                          data-testid={`eea12-eap-sector-male-${String(row.occupationalLevel)}`}
+                        >
+                          M {formatPct(sectorTarget.designatedGroupMale)}
+                        </span>
+                        <span className="mx-1 text-slate-400">·</span>
+                        <span
+                          data-testid={`eea12-eap-sector-female-${String(row.occupationalLevel)}`}
+                        >
+                          F {formatPct(sectorTarget.designatedGroupFemale)}
+                        </span>
+                      </span>
+                    )}
                   </td>
                 </tr>
               )

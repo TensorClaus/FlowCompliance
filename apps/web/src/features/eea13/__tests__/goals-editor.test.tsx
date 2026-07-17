@@ -1,4 +1,4 @@
-import { TIMEFRAME_ONGOING_MESSAGE, type SectorCode } from '@simplifi/shared'
+import { TIMEFRAME_ONGOING_MESSAGE } from '@simplifi/shared'
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import React, { useState } from 'react'
@@ -8,7 +8,7 @@ import type { StepId } from '../../eea/wizard-types'
 import { EEA13StepYearlyPlans } from '../sections/eea13-step-yearly-plans'
 
 const BASE_SETUP = {
-  sectorCode: 'agriculture',
+  sectorCode: 'agriculture_forestry_fishing',
   planPeriod: { startDate: '2025-01-01', endDate: '2030-01-01' },
   consultation: {
     consultedWithEmployees: true,
@@ -102,9 +102,13 @@ describe('EEA13 goals editor', () => {
     const user = userEvent.setup()
     renderYearlyPlans()
 
+    // Sectoral floors are gazetted only for gender groups at the top four
+    // levels: agriculture skilled_technical (level 4) designated female → 44%.
+    await user.selectOptions(screen.getByTestId('eea13-goal-group-1'), 'F')
+    await user.selectOptions(screen.getByTestId('eea13-goal-level-1'), '4')
     await makeFirstGoalValid(user)
     await user.clear(screen.getByTestId('eea13-goal-target-1'))
-    await user.type(screen.getByTestId('eea13-goal-target-1'), '57')
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '43')
 
     expect(screen.getByTestId('eea13-goal-binding-sectoral-1')).toBeInTheDocument()
     expect(screen.getByTestId('eea13-goal-save-1')).toBeDisabled()
@@ -135,14 +139,21 @@ describe('EEA13 goals editor', () => {
     renderYearlyPlans()
 
     await makeFirstGoalValid(user)
+    // Default group A is EAP-bound; type exactly the EAP benchmark (55) to
+    // exercise equality with the effective minimum.
+    await user.clear(screen.getByTestId('eea13-goal-target-1'))
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '55')
 
     expect(screen.getByTestId('eea13-goal-save-1')).not.toBeDisabled()
     await user.click(screen.getByTestId('eea13-goal-save-1'))
     expect(screen.getByTestId('eea13-saved-goal-1-1')).toBeInTheDocument()
   })
 
-  it('renders the EAP-only path when no GN 6124 target exists', () => {
-    renderYearlyPlans({ sectorCode: 'missing_sector' as SectorCode })
+  it('renders the EAP-only path for a race-coded goal with no GN 6124 target', () => {
+    // A race-coded goal (default group A) has no gazetted sectoral floor even
+    // in a gazetted sector — GN 6124 sets gender aggregates, not per-race
+    // targets — so the EAP-only path renders without needing a fake sector.
+    renderYearlyPlans()
 
     expect(screen.getByTestId('eea13-goal-no-sectoral-target-1')).toHaveTextContent(
       'No GN 6124 target for this combination',

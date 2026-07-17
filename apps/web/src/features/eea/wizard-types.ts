@@ -30,7 +30,7 @@ export type StepRegistry = Record<
   {
     sectionKey: string
     component: React.ComponentType<StepProps>
-    validationSchema: z.ZodSchema
+    validationSchema: z.ZodType
     requiresHITL: boolean
   }
 >

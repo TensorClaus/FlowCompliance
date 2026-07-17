@@ -239,7 +239,7 @@ const WorkforceAnalysisSchema = z.object({
 export const EEA13Schema = z
   .object({
     /** UUID of the designated employer. */
-    employerId: z.string().uuid(),
+    employerId: z.uuid(),
     /** GN 6124 sector code for sector-specific target lookup. */
     sectorCode: SectorCodeSchema,
     /** 5-year plan period (start and end dates). */
@@ -259,7 +259,7 @@ export const EEA13Schema = z
     /** CEO or authorised signatory declaration. */
     ceoDeclaration: CEODeclarationSchema,
     /** ISO 8601 datetime string when the plan was submitted. */
-    submittedAt: z.string().datetime(),
+    submittedAt: z.iso.datetime(),
   })
   .refine((plan) => plan.consultation.consultedWithEmployees, {
     message: 'Employee consultation is mandatory before adopting an EEP (EEA s.16)',

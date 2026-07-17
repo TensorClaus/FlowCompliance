@@ -1,13 +1,25 @@
 import {
-  getSectorTargetByLevel,
-  type DesignatedGroupTarget,
+  getSectorTarget,
+  targetLevelForOccupationalLevel,
   type OccupationalLevel,
   type SectorCode,
+  type SectorTargetLevel,
 } from '@simplifi/shared'
 import type { DemoCompany, LevelHeadcount } from '../fixtures/demo-company'
 import { classify, type GapStatus } from './gap-status'
 
-export type GroupKey = 'african' | 'coloured' | 'indian' | 'white' | 'female' | 'disabled'
+/**
+ * The designated-group dimensions GN 6124 sets targets for at a gazetted
+ * occupational level. The gazette targets the aggregate designated group
+ * split by gender (not by race), plus a flat sector-wide disability target:
+ *   - designatedMale   — black (African/Coloured/Indian) males
+ *   - designatedFemale — all women (women are a designated group regardless
+ *                        of race)
+ *   - disabled         — persons with disabilities
+ * White non-disabled males and foreign nationals are excluded from the
+ * designated frame, so these shares are not required to sum to 100%.
+ */
+export type GroupKey = 'designatedMale' | 'designatedFemale' | 'disabled'
 
 export interface GroupGap {
   group: GroupKey
@@ -36,11 +48,16 @@ function groupGap(group: GroupKey, actualPct: number, targetPct: number): GroupG
   return { group, actualPct, targetPct, deltaPct, status: classify(deltaPct) }
 }
 
-export function computeLevelRepresentation(
-  row: LevelHeadcount,
-  target: DesignatedGroupTarget,
-): LevelRepresentation {
-  const citizens =
+/** Worst (most severe) status across a level's group gaps. */
+function worstStatus(groups: GroupGap[]): GapStatus {
+  if (groups.some((g) => g.status === 'gap')) return 'gap'
+  if (groups.some((g) => g.status === 'close')) return 'close'
+  return 'met'
+}
+
+/** SA-citizen headcount at a level (all four designated-frame race columns). */
+function countCitizens(row: LevelHeadcount): number {
+  return (
     row.african.male +
     row.african.female +
     row.coloured.male +
@@ -49,30 +66,50 @@ export function computeLevelRepresentation(
     row.indian.female +
     row.white.male +
     row.white.female
+  )
+}
+
+export function computeLevelRepresentation(
+  row: LevelHeadcount,
+  target: SectorTargetLevel,
+  disabilityTarget: number,
+): LevelRepresentation {
+  const citizens = countCitizens(row)
   const foreign = row.foreignNational.male + row.foreignNational.female
-  const female = row.african.female + row.coloured.female + row.indian.female + row.white.female
+  // Designated males are black (African/Coloured/Indian) males; white males
+  // are outside the designated frame. Designated females are all women.
+  const designatedMale = row.african.male + row.coloured.male + row.indian.male
+  const designatedFemale =
+    row.african.female + row.coloured.female + row.indian.female + row.white.female
 
   const groups: GroupGap[] = [
-    groupGap('african', pct(row.african.male + row.african.female, citizens), target.african),
-    groupGap('coloured', pct(row.coloured.male + row.coloured.female, citizens), target.coloured),
-    groupGap('indian', pct(row.indian.male + row.indian.female, citizens), target.indian),
-    groupGap('white', pct(row.white.male + row.white.female, citizens), target.white),
-    groupGap('female', pct(female, citizens), target.female),
-    groupGap('disabled', pct(row.disabled, citizens), target.disabledTarget),
+    groupGap('designatedMale', pct(designatedMale, citizens), target.designatedGroupMale),
+    groupGap('designatedFemale', pct(designatedFemale, citizens), target.designatedGroupFemale),
+    groupGap('disabled', pct(row.disabled, citizens), disabilityTarget),
   ]
-
-  const worst = groups.some((g) => g.status === 'gap')
-    ? 'gap'
-    : groups.some((g) => g.status === 'close')
-      ? 'close'
-      : 'met'
 
   return {
     level: row.level,
     citizenHeadcount: citizens,
     foreignNationalHeadcount: foreign,
     groups,
-    status: worst,
+    status: worstStatus(groups),
+  }
+}
+
+/**
+ * A workforce level outside GN 6124's gazetted top-four target scope (levels
+ * 5-7): headcount is still counted so dashboard totals stay complete, but
+ * there are no sector-target gaps to assess, so groups is empty and the level
+ * is not treated as at-risk.
+ */
+function buildUnassessedLevel(row: LevelHeadcount): LevelRepresentation {
+  return {
+    level: row.level,
+    citizenHeadcount: countCitizens(row),
+    foreignNationalHeadcount: row.foreignNational.male + row.foreignNational.female,
+    groups: [],
+    status: 'met',
   }
 }
 
@@ -80,13 +117,13 @@ export function computeSectorCompliance(company: DemoCompany): {
   levels: LevelRepresentation[]
   sectorCode: SectorCode
 } {
+  const sector = getSectorTarget(company.sectorCode)
   const levels = company.workforce.map((row) => {
-    const target = getSectorTargetByLevel(company.sectorCode, row.level)
-    if (!target)
-      throw new Error(
-        `No GN 6124 target for sector ${company.sectorCode} level ${String(row.level)}`,
-      )
-    return computeLevelRepresentation(row, target)
+    const targetLevel = targetLevelForOccupationalLevel(row.level)
+    const levelTarget =
+      sector === undefined || targetLevel === undefined ? undefined : sector.targets[targetLevel]
+    if (levelTarget === undefined || sector === undefined) return buildUnassessedLevel(row)
+    return computeLevelRepresentation(row, levelTarget, sector.disabilityTarget)
   })
   return { levels, sectorCode: company.sectorCode }
 }

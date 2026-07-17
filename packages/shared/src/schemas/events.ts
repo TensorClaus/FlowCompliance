@@ -289,7 +289,7 @@ export const EEAEventSchema = z.object({
    * ordering so the event stream can be reconstructed from the primary key
    * without a separate sequence column.
    */
-  eventId: z.string().uuid(),
+  eventId: z.uuid(),
 
   /**
    * Tenant (employer) identifier. All events are scoped to a single tenant;
