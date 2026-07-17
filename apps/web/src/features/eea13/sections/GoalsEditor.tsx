@@ -234,12 +234,12 @@ export function GoalsEditor({
     }
   }
 
-  const targetMessage =
-    targetViolation?.binding === 'sectoral'
-      ? 'Target must meet or exceed the sectoral baseline.'
-      : targetViolation?.binding === 'eap'
-        ? 'Target must meet or exceed the EAP benchmark.'
-        : null
+  let targetMessage: string | null = null
+  if (targetViolation?.binding === 'sectoral') {
+    targetMessage = 'Target must meet or exceed the sectoral baseline.'
+  } else if (targetViolation?.binding === 'eap') {
+    targetMessage = 'Target must meet or exceed the EAP benchmark.'
+  }
 
   return (
     <div className="mt-4 rounded border border-slate-200 bg-white px-4 py-4">
@@ -339,9 +339,13 @@ export function GoalsEditor({
             <span className="text-xs text-slate-400">
               {current.source === 'eea12-rows'
                 ? 'From EEA12 rows for selected level and group.'
-                : current.source === 'eea12-section-c'
-                  ? 'From EEA12 Section C designated-group aggregate.'
-                  : 'No EEA12 source available; defaults to 0.0%.'}
+                : null}
+              {current.source === 'eea12-section-c'
+                ? 'From EEA12 Section C designated-group aggregate.'
+                : null}
+              {current.source !== 'eea12-rows' && current.source !== 'eea12-section-c'
+                ? 'No EEA12 source available; defaults to 0.0%.'
+                : null}
             </span>
           </label>
 

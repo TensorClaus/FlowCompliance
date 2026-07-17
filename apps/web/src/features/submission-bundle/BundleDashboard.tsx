@@ -292,13 +292,13 @@ export function BundleDashboard({
           statusTestId="bundle-eea4-status"
         >
           <p className="mt-1 text-xs" data-testid="bundle-eea4-linkage">
-            {evaluation === null ? (
-              <span className="text-slate-400">…</span>
-            ) : linkageMatches ? (
+            {evaluation === null ? <span className="text-slate-400">…</span> : null}
+            {evaluation !== null && linkageMatches ? (
               <span className="text-emerald-700">linked to EEA2</span>
-            ) : (
+            ) : null}
+            {evaluation !== null && !linkageMatches ? (
               <span className="text-red-700">not linked</span>
-            )}
+            ) : null}
           </p>
         </GatingCard>
 

@@ -147,7 +147,9 @@ export function ComplianceDashboard({ now = new Date() }: ComplianceDashboardPro
           <p
             className={clsx(
               'mt-2 text-4xl font-bold tabular-nums',
-              score >= 80 ? 'text-emerald-600' : score >= 60 ? 'text-amber-600' : 'text-red-600',
+              score >= 80 && 'text-emerald-600',
+              score < 80 && score >= 60 && 'text-amber-600',
+              score < 60 && 'text-red-600',
             )}
           >
             {score}

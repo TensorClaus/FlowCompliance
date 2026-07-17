@@ -86,11 +86,9 @@ export const remunerationCellAdapter: CellAdapter<RemunerationCell> = {
               aria-invalid={hasError || undefined}
               className={clsx(
                 'w-14 rounded border px-1 py-0.5 text-center text-xs',
-                hasError
-                  ? 'border-red-400 bg-red-50'
-                  : hasWarning
-                    ? 'border-amber-400 bg-amber-50'
-                    : 'border-slate-300',
+                hasError && 'border-red-400 bg-red-50',
+                !hasError && hasWarning && 'border-amber-400 bg-amber-50',
+                !hasError && !hasWarning && 'border-slate-300',
               )}
               data-subfield={spec.key}
               disabled={disabled}

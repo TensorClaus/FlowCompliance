@@ -161,7 +161,8 @@ export function DeclarationSection({
           </div>
           <ValidationReportPanel report={report} ruleNames={EEA4_DECLARATION_RULE_NAMES} />
         </div>
-      ) : alreadySigned ? (
+      ) : null}
+      {!blocked && alreadySigned ? (
         <div
           className="rounded border border-emerald-300 bg-emerald-50 px-4 py-3"
           data-testid="eea4-declaration-signed"
@@ -170,7 +171,8 @@ export function DeclarationSection({
             Declaration captured. Status: {currentStatus}.
           </p>
         </div>
-      ) : (
+      ) : null}
+      {!blocked && !alreadySigned ? (
         <div className="grid gap-4" data-testid="eea4-declaration-form">
           <p className="text-sm text-slate-700">
             All cross-form checks have passed. Complete the declaration to advance the form to CEO
@@ -242,7 +244,7 @@ export function DeclarationSection({
             Confirm and sign
           </button>
         </div>
-      )}
+      ) : null}
     </section>
   )
 }

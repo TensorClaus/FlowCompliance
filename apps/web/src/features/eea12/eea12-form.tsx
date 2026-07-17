@@ -341,7 +341,7 @@ export function EEA12Form({
         />
 
         {/* Active step content */}
-        {ActiveStep === undefined ? null : currentStep === EEA12_SECTION_C_STEP_ID ? (
+        {ActiveStep !== undefined && currentStep === EEA12_SECTION_C_STEP_ID ? (
           <EEA12SectionC
             completedSteps={new Set<StepId>()}
             formId={formId}
@@ -359,7 +359,8 @@ export function EEA12Form({
             updateWizardContext={() => {}}
             wizardContext={wizardContext}
           />
-        ) : (
+        ) : null}
+        {ActiveStep !== undefined && currentStep !== EEA12_SECTION_C_STEP_ID ? (
           <ActiveStep
             completedSteps={new Set<StepId>()}
             formId={formId}
@@ -375,7 +376,7 @@ export function EEA12Form({
             updateWizardContext={() => {}}
             wizardContext={wizardContext}
           />
-        )}
+        ) : null}
 
         {/* Navigation footer */}
         <footer className="flex items-center gap-2 border-t border-slate-200 pt-4">

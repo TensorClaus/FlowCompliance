@@ -251,11 +251,12 @@ export function EEA13StepBarriersRemoval({ onAdvance }: StepProps): React.ReactE
                     >
                       high severity
                     </span>
-                  ) : rowMeta.seedSeverity === undefined ? null : (
+                  ) : null}
+                  {!isHighSeveritySeed && rowMeta.seedSeverity !== undefined ? (
                     <span className={SEVERITY_BADGE[rowMeta.seedSeverity]}>
                       {rowMeta.seedSeverity} severity
                     </span>
-                  )}
+                  ) : null}
                 </div>
               ) : null}
 

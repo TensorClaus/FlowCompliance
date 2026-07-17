@@ -239,11 +239,9 @@ function createSectionDCellAdapter(
       const isEditInteractive = context.mode === 'edit' || context.mode === 'validate'
       const inputClass = clsx(
         'w-14 rounded border px-1 py-0.5 text-center text-xs',
-        context.hasError
-          ? 'border-red-400 bg-red-50'
-          : context.hasWarning
-            ? 'border-amber-400 bg-amber-50'
-            : 'border-slate-300',
+        context.hasError && 'border-red-400 bg-red-50',
+        !context.hasError && context.hasWarning && 'border-amber-400 bg-amber-50',
+        !context.hasError && !context.hasWarning && 'border-slate-300',
       )
 
       return (
