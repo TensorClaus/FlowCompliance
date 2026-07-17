@@ -5,10 +5,9 @@ import {
   type SectorCode,
 } from '@simplifi/shared'
 import type { DemoCompany, LevelHeadcount } from '../fixtures/demo-company'
+import { classify, type GapStatus } from './gap-status'
 
 export type GroupKey = 'african' | 'coloured' | 'indian' | 'white' | 'female' | 'disabled'
-
-export type GapStatus = 'met' | 'close' | 'gap'
 
 export interface GroupGap {
   group: GroupKey
@@ -26,14 +25,6 @@ export interface LevelRepresentation {
   foreignNationalHeadcount: number
   groups: GroupGap[]
   status: GapStatus
-}
-
-const CLOSE_THRESHOLD_PCT = 5
-
-function classify(deltaPct: number): GapStatus {
-  if (deltaPct >= 0) return 'met'
-  if (deltaPct >= -CLOSE_THRESHOLD_PCT) return 'close'
-  return 'gap'
 }
 
 function pct(part: number, whole: number): number {
@@ -168,3 +159,5 @@ export function formatZar(amount: number): string {
     maximumFractionDigits: 0,
   }).format(amount)
 }
+
+export { type GapStatus } from './gap-status'
