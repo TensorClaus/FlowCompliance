@@ -10,6 +10,7 @@
     "test:e2e": "playwright test",
     "preview": "vite preview",
     "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --passWithNoTests --coverage",
     "lint": "eslint src"
   },
   "dependencies": {

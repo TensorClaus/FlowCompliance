@@ -6,8 +6,10 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     env: {
-      DATABASE_URL: 'postgresql://test:test@localhost:5432/simplifi_test',
-      REDIS_URL: 'redis://localhost:6379',
+      // CI provides its own service credentials; the literals are local-dev defaults.
+      DATABASE_URL:
+        process.env.DATABASE_URL ?? 'postgresql://test:test@localhost:5432/simplifi_test',
+      REDIS_URL: process.env.REDIS_URL ?? 'redis://localhost:6379',
       SESSION_SECRET: process.env.SESSION_SECRET ?? '',
       NODE_ENV: 'test',
     },

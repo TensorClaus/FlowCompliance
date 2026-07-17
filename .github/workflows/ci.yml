@@ -72,20 +72,26 @@ jobs:
         run: pnpm typecheck
 
       # ── Test + coverage ─────────────────────────────────────────────────────
-      # Run per-package so each package's 80% threshold is enforced individually.
-      # Stub env vars satisfy config.ts Zod validation without a real DB/Redis.
+      # Run per-package so each package's threshold is enforced individually.
+      # test:coverage scripts are used because pnpm does not forward --coverage
+      # to the underlying script ("Unknown option: 'coverage'").
       - name: Test (shared)
-        run: pnpm --filter @simplifi/shared test --coverage
+        run: pnpm --filter @simplifi/shared test:coverage
+
+      - name: Migrate test database
+        run: pnpm --filter @simplifi/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
 
       - name: Test (api)
-        run: pnpm --filter @simplifi/api test --coverage
+        run: pnpm --filter @simplifi/api test:coverage
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
           REDIS_URL: redis://localhost:6379
 
       - name: Test (web)
-        run: pnpm --filter @simplifi/web test --coverage
+        run: pnpm --filter @simplifi/web test:coverage
 
   e2e:
     name: E2E (Playwright)
