@@ -247,8 +247,9 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
 
     // Server-clock authoritative declarationDate. Any body value is ignored
     // by virtue of the spread order: declarationDate is written AFTER the
-    // spread so it overrides whatever the client supplied.
-    const declarationDate = todayIso()
+    // spread so it overrides whatever the client supplied. Prisma requires a
+    // full DateTime even for @db.Date columns, so anchor to UTC midnight.
+    const declarationDate = new Date(`${todayIso()}T00:00:00.000Z`)
 
     // The KMS extension encrypts race/gender/disability/disabilityNature/
     // signatureDataUrl in-place before the Prisma adapter hands the row to

@@ -5,6 +5,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // Integration suites build the full app + hit the service DB in their
+    // beforeAll hooks; cold CI runners need more than the 10s default.
+    hookTimeout: 30_000,
     env: {
       // CI provides its own service credentials; the literals are local-dev defaults.
       DATABASE_URL:

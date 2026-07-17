@@ -110,7 +110,7 @@ async function seedDeclaration(tenantId: string, employeeId: string): Promise<st
       disability: 'No',
       foreignNational: false,
       signatureDataUrl: 'data:image/png;base64,SEEDED',
-      declarationDate: todayIso(),
+      declarationDate: new Date(`${todayIso()}T00:00:00.000Z`),
     },
   })
 
