@@ -502,11 +502,10 @@ describe('event-store integration', () => {
     } finally {
       await worker.close()
       await queue.close()
-      await runInTenantTransaction(tenantId, async (tx): Promise<void> => {
-        await tx.eea2Draft.deleteMany({ where: { tenantId } })
-        await tx.eeaEvent.deleteMany({ where: { tenantId } })
-        await tx.tenant.deleteMany({ where: { id: tenantId } })
-      })
+      // eea_events is append-only (no_delete_events DO INSTEAD NOTHING), so
+      // deleteMany silently removes nothing and the tenant delete then hits
+      // the FK. TRUNCATE is exempt from rules and is the sanctioned cleanup.
+      await prisma.$executeRawUnsafe('TRUNCATE TABLE eea2_drafts, eea_events, tenants CASCADE')
     }
   })
 })

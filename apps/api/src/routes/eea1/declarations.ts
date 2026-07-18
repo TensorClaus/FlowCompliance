@@ -118,12 +118,17 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
     async (request, reply) => {
       const { declarationId } = request.params
 
-      // RLS automatically appends tenantId to the WHERE clause via the
-      // SET LOCAL app.tenant_id guard set by tenant-context. A row that
-      // belongs to another tenant is therefore invisible and findFirst
-      // returns null — which we surface as 404 to avoid leaking existence.
-      const declaration = await prisma.eea1Declaration.findFirst({
-        where: { id: declarationId },
+      // RLS appends tenantId via the app.tenant_id GUC, which is only reliably
+      // in scope inside a transaction that sets it first (a transaction-local
+      // set_config reverts to '' on the pooled connection afterwards, and the
+      // policy's ''::uuid cast then errors on any bare query). A row that
+      // belongs to another tenant is invisible and findFirst returns null —
+      // which we surface as 404 to avoid leaking existence.
+      const declaration = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${request.user.tenantId}, true)`
+        return tx.eea1Declaration.findFirst({
+          where: { id: declarationId },
+        })
       })
 
       if (declaration === null) {
@@ -160,18 +165,6 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
 
       const { declarationId } = request.params
 
-      // Load the existing row first so we can (a) authorise the caller and
-      // (b) capture prevValue for each field event.
-      const existing = await prisma.eea1Declaration.findFirst({
-        where: { id: declarationId },
-      })
-      if (existing === null) {
-        return reply.status(404).send({ error: 'Not found' })
-      }
-      if (!isAuthorisedOwnerOrPrivileged(request.user, existing.employeeId)) {
-        return reply.status(403).send({ error: 'Forbidden' })
-      }
-
       const tenantId = request.user.tenantId
       const userId = request.user.sub
       // The JWT does not carry a display name; the email claim is the only
@@ -179,51 +172,78 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
       // here for audit-log readability; never used for authz decisions.
       const userName = request.user.email
 
-      // Emit one EEA1_AUTOSAVE event PER FIELD CHANGED, ordered by the
-      // canonical field list above. signatureDataUrl is NOT in PATCHABLE_FIELDS
-      // so it can never reach this branch — and therefore never lands in
-      // eea_events regardless of upstream behaviour.
-      for (const fieldName of PATCHABLE_FIELDS) {
-        if (!(fieldName in body)) continue
-        const newValue = body[fieldName]
-        const prevValue = (existing as Record<string, unknown>)[fieldName]
+      // All reads/writes share one transaction so the RLS GUC set by
+      // set_config stays in scope for every statement (see GET handler note).
+      const result = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
 
-        await prisma.eeaEvent.create({
-          data: {
-            tenantId,
-            formId: declarationId,
-            formType: 'EEA1',
-            eventType: 'EEA1_AUTOSAVE',
-            fieldPath: fieldName,
-            // Prisma Json columns accept null/scalars/objects; the cast here
-            // narrows from `unknown` so the Prisma client type-checks. The
-            // PII gate in /eea2/:formId/events strips PII paths on read; the
-            // four whitelisted PATCH fields are non-PII so they remain.
-            prevValue: prevValue as never,
-            newValue: newValue as never,
-            metadata: {
-              userId,
-              userName,
-            },
-          },
+        // Load the existing row first so we can (a) authorise the caller and
+        // (b) capture prevValue for each field event.
+        const existing = await tx.eea1Declaration.findFirst({
+          where: { id: declarationId },
         })
-      }
-
-      // Apply the actual update. The KMS extension only intercepts the five
-      // encrypted PII fields — none of which are present here. We build a
-      // dense object (only defined keys) to satisfy exactOptionalPropertyTypes.
-      const updateData: Record<string, unknown> = {}
-      for (const fieldName of PATCHABLE_FIELDS) {
-        if (fieldName in body) {
-          updateData[fieldName] = body[fieldName]
+        if (existing === null) {
+          return { kind: 'not-found' as const }
         }
-      }
-      const updated = await prisma.eea1Declaration.update({
-        where: { id: declarationId },
-        data: updateData as never,
+        if (!isAuthorisedOwnerOrPrivileged(request.user, existing.employeeId)) {
+          return { kind: 'forbidden' as const }
+        }
+
+        // Emit one EEA1_AUTOSAVE event PER FIELD CHANGED, ordered by the
+        // canonical field list above. signatureDataUrl is NOT in
+        // PATCHABLE_FIELDS so it can never reach this branch — and therefore
+        // never lands in eea_events regardless of upstream behaviour.
+        for (const fieldName of PATCHABLE_FIELDS) {
+          if (!(fieldName in body)) continue
+          const newValue = body[fieldName]
+          const prevValue = (existing as Record<string, unknown>)[fieldName]
+
+          await tx.eeaEvent.create({
+            data: {
+              tenantId,
+              formId: declarationId,
+              formType: 'EEA1',
+              eventType: 'EEA1_AUTOSAVE',
+              fieldPath: fieldName,
+              // Prisma Json columns accept null/scalars/objects; the cast here
+              // narrows from `unknown` so the Prisma client type-checks. The
+              // PII gate in /eea2/:formId/events strips PII paths on read; the
+              // four whitelisted PATCH fields are non-PII so they remain.
+              prevValue: prevValue as never,
+              newValue: newValue as never,
+              metadata: {
+                userId,
+                userName,
+              },
+            },
+          })
+        }
+
+        // Apply the actual update. The KMS extension only intercepts the five
+        // encrypted PII fields — none of which are present here. We build a
+        // dense object (only defined keys) to satisfy exactOptionalPropertyTypes.
+        const updateData: Record<string, unknown> = {}
+        for (const fieldName of PATCHABLE_FIELDS) {
+          if (fieldName in body) {
+            updateData[fieldName] = body[fieldName]
+          }
+        }
+        const updated = await tx.eea1Declaration.update({
+          where: { id: declarationId },
+          data: updateData as never,
+        })
+
+        return { kind: 'ok' as const, updated }
       })
 
-      return reply.status(200).send(updated)
+      if (result.kind === 'not-found') {
+        return reply.status(404).send({ error: 'Not found' })
+      }
+      if (result.kind === 'forbidden') {
+        return reply.status(403).send({ error: 'Forbidden' })
+      }
+
+      return reply.status(200).send(result.updated)
     },
   )
 
@@ -257,13 +277,17 @@ export function eea1DeclarationsRoutes(app: FastifyInstance): void {
     // This consent-gated submit path requires signatureDataUrl and accepts
     // the demographic fields that are explicitly barred from PATCH autosave.
     // Cast `as never` keeps TypeScript happy without re-declaring the model
-    // contract here.
-    const created = await prisma.eea1Declaration.create({
-      data: {
-        ...(body as Record<string, unknown>),
-        declarationDate,
-        tenantId: request.user.tenantId,
-      } as never,
+    // contract here. The transaction scopes the RLS GUC for the insert's
+    // WITH CHECK evaluation (see GET handler note).
+    const created = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${request.user.tenantId}, true)`
+      return tx.eea1Declaration.create({
+        data: {
+          ...(body as Record<string, unknown>),
+          declarationDate,
+          tenantId: request.user.tenantId,
+        } as never,
+      })
     })
 
     return reply.status(201).send(created)

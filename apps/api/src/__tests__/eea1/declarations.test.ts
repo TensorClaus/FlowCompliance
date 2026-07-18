@@ -98,20 +98,25 @@ function buildDeclarationBody(employeeId: string): Record<string, unknown> {
 async function seedDeclaration(tenantId: string, employeeId: string): Promise<string> {
   const id = randomUUID()
 
-  await prisma.eea1Declaration.create({
-    data: {
-      id,
-      tenantId,
-      employeeId,
-      name: 'Seed Employee',
-      workplaceNumber: 'WP-SEED',
-      race: 'White',
-      gender: 'Male',
-      disability: 'No',
-      foreignNational: false,
-      signatureDataUrl: 'data:image/png;base64,SEEDED',
-      declarationDate: new Date(`${todayIso()}T00:00:00.000Z`),
-    },
+  // RLS WITH CHECK requires the tenant GUC in scope, which only holds inside
+  // a transaction that sets it first.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+    await tx.eea1Declaration.create({
+      data: {
+        id,
+        tenantId,
+        employeeId,
+        name: 'Seed Employee',
+        workplaceNumber: 'WP-SEED',
+        race: 'White',
+        gender: 'Male',
+        disability: 'No',
+        foreignNational: false,
+        signatureDataUrl: 'data:image/png;base64,SEEDED',
+        declarationDate: new Date(`${todayIso()}T00:00:00.000Z`),
+      },
+    })
   })
 
   return id
