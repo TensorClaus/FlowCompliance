@@ -185,11 +185,17 @@ jobs:
         run: until curl -sf http://localhost:5173; do sleep 1; done
         timeout-minutes: 2
 
+      # The specs import apps/api/src/config/env.ts (e.g. to mint test JWTs
+      # with SESSION_SECRET), so they need the same env the API server gets.
       - name: Run E2E tests
         run: pnpm --filter @simplifi/web exec playwright test
         env:
           PLAYWRIGHT_API_URL: http://localhost:3001
           VITE_APP_URL: http://localhost:5173
+          NODE_ENV: test
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+          REDIS_URL: redis://localhost:6379
+          SESSION_SECRET: ci-test-session-secret-must-be-at-least-32-chars
 
       - name: Upload Playwright report
         if: failure()
