@@ -156,8 +156,16 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @simplifi/web exec playwright install --with-deps chromium
 
+      - name: Migrate E2E database
+        run: pnpm --filter @simplifi/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+
+      # tsx (the dev runner) executes the server from TypeScript source:
+      # @simplifi/shared's `import` export condition points at .ts files, so
+      # the compiled dist/index.js cannot run under plain node.
       - name: Start API server
-        run: pnpm --filter @simplifi/api start &
+        run: pnpm --filter @simplifi/api exec tsx src/index.ts &
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
