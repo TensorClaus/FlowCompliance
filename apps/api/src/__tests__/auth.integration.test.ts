@@ -66,9 +66,11 @@ vi.mock('../lib/auth.js', async (importOriginal) => {
 // Test constants
 // ---------------------------------------------------------------------------
 
-const TENANT_A_ID = '11111111-1111-1111-1111-111111111111'
-const TENANT_B_ID = '22222222-2222-2222-2222-222222222222'
-const USER_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+// RFC 4122-valid fixtures: Zod 4's z.uuid() enforces the version and variant
+// nibbles, so all-same-digit pseudo-UUIDs are rejected with 400.
+const TENANT_A_ID = '11111111-1111-4111-8111-111111111111'
+const TENANT_B_ID = '22222222-2222-4222-8222-222222222222'
+const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const TEST_EMAIL = 'test@simplifi.co.za'
 const TEST_PASSWORD = 'SecurePassword123!'
 

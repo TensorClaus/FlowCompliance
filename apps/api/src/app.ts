@@ -36,7 +36,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(sensible)
   void app.register(helmet)
   void app.register(cors)
-  void app.register(rateLimit, { max: 100, timeWindow: '1 minute' })
+  // E2E suites run many parallel workers against seed + form routes and trip
+  // the production ceiling with ordinary test traffic; keep the limiter
+  // registered in test (so the plugin path is exercised) but effectively open.
+  void app.register(rateLimit, {
+    max: config.NODE_ENV === 'test' ? 10_000 : 100,
+    timeWindow: '1 minute',
+  })
 
   // Public routes (no auth)
   app.get('/health', () => ({ status: 'ok' }))
@@ -45,29 +51,41 @@ export async function buildApp(): Promise<FastifyInstance> {
   // are reachable without a pre-existing Bearer token. The tenant-context plugin
   // only skips /health explicitly; auth routes issue the token that all other
   // routes then require.
-  await app.register((instance) => {
+  // Wrappers MUST signal completion: avvio waits for the `done` callback of
+  // any plugin that does not return a promise, so a wrapper that neither calls
+  // done nor returns a promise hangs registration forever
+  // ("Plugin did not start in time").
+  await app.register((instance, _opts, done) => {
     authRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     totpRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     employerRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea1Routes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea1DeclarationsRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea2Routes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eea2EventsRoutes(instance)
+    done()
   })
-  await app.register((instance) => {
+  await app.register((instance, _opts, done) => {
     eventStoreRoutes(instance)
+    done()
   })
 
   // Tenant context — enforces JWT auth + sets RLS GUC for all non-public routes.
@@ -83,8 +101,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   // E2E suites. Never registered in production or staging environments.
   if (config.NODE_ENV === 'test') {
     const { testSeedRoutes } = await import('./routes/test-seed.routes.js')
-    await app.register((instance) => {
+    await app.register((instance, _opts, done) => {
       testSeedRoutes(instance)
+      done()
     })
   }
 

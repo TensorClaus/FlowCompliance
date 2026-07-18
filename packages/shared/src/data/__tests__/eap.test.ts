@@ -1,6 +1,31 @@
 import { describe, it, expect } from 'vitest'
-import { PROVINCES, EAP_DATA, getEapByProvince, getEapByProvinceAndLevel } from '../eap.js'
+import {
+  EAP_DATASET_VERSION,
+  PROVINCES,
+  EAP_DATA,
+  getEapByProvince,
+  getEapByProvinceAndLevel,
+} from '../eap.js'
 import type { EapProvince } from '../eap.js'
+
+// ---------------------------------------------------------------------------
+// EAP_DATASET_VERSION
+// ---------------------------------------------------------------------------
+
+describe('EAP_DATASET_VERSION', () => {
+  it('carries the PLACEHOLDER prefix until real StatsSA QLFS data is ingested', () => {
+    // Load-bearing per the module doc comment: consumers persist this string
+    // alongside EAP-derived output so a reviewer can tell the figures are
+    // provisional. Dropping the prefix must happen in the same commit that
+    // replaces the underlying data.
+    expect(EAP_DATASET_VERSION.startsWith('PLACEHOLDER')).toBe(true)
+  })
+
+  it('identifies the StatsSA QLFS source quarter', () => {
+    expect(EAP_DATASET_VERSION).toContain('StatsSA')
+    expect(EAP_DATASET_VERSION).toContain('QLFS')
+  })
+})
 
 // ---------------------------------------------------------------------------
 // PROVINCES

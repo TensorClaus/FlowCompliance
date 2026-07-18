@@ -72,20 +72,37 @@ jobs:
         run: pnpm typecheck
 
       # ── Test + coverage ─────────────────────────────────────────────────────
-      # Run per-package so each package's 80% threshold is enforced individually.
-      # Stub env vars satisfy config.ts Zod validation without a real DB/Redis.
+      # Run per-package so each package's threshold is enforced individually.
+      # test:coverage scripts are used because pnpm does not forward --coverage
+      # to the underlying script ("Unknown option: 'coverage'").
       - name: Test (shared)
-        run: pnpm --filter @simplifi/shared test --coverage
+        run: pnpm --filter @simplifi/shared test:coverage
+
+      - name: Migrate test database
+        run: pnpm --filter @simplifi/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+
+      # The RLS policies target the simplifi_app role (created by the RLS
+      # migration); the bootstrap `ci` user is a superuser and would bypass
+      # them, so the api tests must connect as simplifi_app. TRUNCATE is
+      # needed by test cleanup and is not part of the migration's grants.
+      - name: Prepare RLS test role
+        run: |
+          PGPASSWORD=ci psql -h localhost -U ci -d ci_test \
+            -c "ALTER ROLE simplifi_app LOGIN PASSWORD 'ci';" \
+            -c "GRANT TRUNCATE ON ALL TABLES IN SCHEMA public TO simplifi_app;"
 
       - name: Test (api)
-        run: pnpm --filter @simplifi/api test --coverage
+        run: pnpm --filter @simplifi/api test:coverage
         env:
           NODE_ENV: test
-          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+          DATABASE_URL: postgresql://simplifi_app:ci@localhost:5432/ci_test
           REDIS_URL: redis://localhost:6379
+          SESSION_SECRET: ci-test-session-secret-must-be-at-least-32-chars
 
       - name: Test (web)
-        run: pnpm --filter @simplifi/web test --coverage
+        run: pnpm --filter @simplifi/web test:coverage
 
   e2e:
     name: E2E (Playwright)
@@ -139,8 +156,16 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm --filter @simplifi/web exec playwright install --with-deps chromium
 
+      - name: Migrate E2E database
+        run: pnpm --filter @simplifi/api exec prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+
+      # tsx (the dev runner) executes the server from TypeScript source:
+      # @simplifi/shared's `import` export condition points at .ts files, so
+      # the compiled dist/index.js cannot run under plain node.
       - name: Start API server
-        run: pnpm --filter @simplifi/api start &
+        run: pnpm --filter @simplifi/api exec tsx src/index.ts &
         env:
           NODE_ENV: test
           DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
@@ -160,11 +185,17 @@ jobs:
         run: until curl -sf http://localhost:5173; do sleep 1; done
         timeout-minutes: 2
 
+      # The specs import apps/api/src/config/env.ts (e.g. to mint test JWTs
+      # with SESSION_SECRET), so they need the same env the API server gets.
       - name: Run E2E tests
         run: pnpm --filter @simplifi/web exec playwright test
         env:
           PLAYWRIGHT_API_URL: http://localhost:3001
           VITE_APP_URL: http://localhost:5173
+          NODE_ENV: test
+          DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
+          REDIS_URL: redis://localhost:6379
+          SESSION_SECRET: ci-test-session-secret-must-be-at-least-32-chars
 
       - name: Upload Playwright report
         if: failure()

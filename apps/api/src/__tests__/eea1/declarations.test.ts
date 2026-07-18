@@ -98,20 +98,25 @@ function buildDeclarationBody(employeeId: string): Record<string, unknown> {
 async function seedDeclaration(tenantId: string, employeeId: string): Promise<string> {
   const id = randomUUID()
 
-  await prisma.eea1Declaration.create({
-    data: {
-      id,
-      tenantId,
-      employeeId,
-      name: 'Seed Employee',
-      workplaceNumber: 'WP-SEED',
-      race: 'White',
-      gender: 'Male',
-      disability: 'No',
-      foreignNational: false,
-      signatureDataUrl: 'data:image/png;base64,SEEDED',
-      declarationDate: todayIso(),
-    },
+  // RLS WITH CHECK requires the tenant GUC in scope, which only holds inside
+  // a transaction that sets it first.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+    await tx.eea1Declaration.create({
+      data: {
+        id,
+        tenantId,
+        employeeId,
+        name: 'Seed Employee',
+        workplaceNumber: 'WP-SEED',
+        race: 'White',
+        gender: 'Male',
+        disability: 'No',
+        foreignNational: false,
+        signatureDataUrl: 'data:image/png;base64,SEEDED',
+        declarationDate: new Date(`${todayIso()}T00:00:00.000Z`),
+      },
+    })
   })
 
   return id
@@ -143,11 +148,16 @@ describe('EEA1 declaration routes', () => {
     expect(response.statusCode).toBe(201)
     const created = response.json<EEA1PostResponse>()
 
-    const rows = await prisma.$queryRaw<RawEea1Row[]>`
-      SELECT id, race, "declarationDate"
-      FROM eea1_declarations
-      WHERE id = CAST(${created.id} AS uuid)
-    `
+    // Tenant-scoped transaction: RLS is enforced for the test role and a bare
+    // query evaluates the policy against the connection's stale '' GUC.
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      return tx.$queryRaw<RawEea1Row[]>`
+        SELECT id, race, "declarationDate"
+        FROM eea1_declarations
+        WHERE id = CAST(${created.id} AS uuid)
+      `
+    })
 
     expect(rows).toHaveLength(1)
     const row = rows[0]
@@ -218,11 +228,14 @@ describe('EEA1 declaration routes', () => {
     expect(response.statusCode).toBe(201)
     const created = response.json<EEA1PostResponse>()
 
-    const rows = await prisma.$queryRaw<RawEea1Row[]>`
-      SELECT id, race, "declarationDate"
-      FROM eea1_declarations
-      WHERE id = CAST(${created.id} AS uuid)
-    `
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      return tx.$queryRaw<RawEea1Row[]>`
+        SELECT id, race, "declarationDate"
+        FROM eea1_declarations
+        WHERE id = CAST(${created.id} AS uuid)
+      `
+    })
 
     const row = rows[0]
     if (row === undefined) throw new Error('Expected created EEA1 row')
@@ -248,19 +261,22 @@ describe('EEA1 declaration routes', () => {
 
     expect(response.statusCode).toBe(200)
 
-    const nameRows = await prisma.$queryRaw<RawCountRow[]>`
-      SELECT COUNT(*)::int AS count
-      FROM eea_events
-      WHERE "formId" = CAST(${declarationId} AS uuid)
-        AND "fieldPath" = 'name'
-    `
-
-    const piiRows = await prisma.$queryRaw<RawCountRow[]>`
-      SELECT COUNT(*)::int AS count
-      FROM eea_events
-      WHERE "formId" = CAST(${declarationId} AS uuid)
-        AND "fieldPath" IN (${Prisma.join(PII_FIELD_PATHS)})
-    `
+    const { nameRows, piiRows } = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      const scopedNameRows = await tx.$queryRaw<RawCountRow[]>`
+        SELECT COUNT(*)::int AS count
+        FROM eea_events
+        WHERE "formId" = CAST(${declarationId} AS uuid)
+          AND "fieldPath" = 'name'
+      `
+      const scopedPiiRows = await tx.$queryRaw<RawCountRow[]>`
+        SELECT COUNT(*)::int AS count
+        FROM eea_events
+        WHERE "formId" = CAST(${declarationId} AS uuid)
+          AND "fieldPath" IN (${Prisma.join(PII_FIELD_PATHS)})
+      `
+      return { nameRows: scopedNameRows, piiRows: scopedPiiRows }
+    })
 
     expect(nameRows[0]?.count).toBe(1)
     expect(piiRows[0]?.count).toBe(0)

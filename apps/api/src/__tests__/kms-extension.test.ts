@@ -72,17 +72,15 @@ describe('kms encryption extension (eea1_declarations)', () => {
   const createdTenantIds: string[] = []
 
   afterAll(async () => {
-    if (createdIds.length > 0) {
-      await prisma.$executeRawUnsafe(
-        `DELETE FROM eea1_declarations WHERE id = ANY($1::uuid[])`,
-        createdIds,
-      )
-    }
-    if (createdTenantIds.length > 0) {
-      await prisma.$executeRawUnsafe(
-        `DELETE FROM tenants WHERE id = ANY($1::uuid[])`,
-        createdTenantIds,
-      )
+    // Cleanup must run inside a tenant-scoped transaction: RLS is enforced for
+    // the test role, and a bare query evaluates the policy against the
+    // connection's stale '' GUC, which fails the ::uuid cast.
+    for (const tenantId of createdTenantIds) {
+      await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+        await tx.$executeRaw`DELETE FROM eea1_declarations WHERE "tenantId" = ${tenantId}::uuid`
+        await tx.$executeRaw`DELETE FROM tenants WHERE id = ${tenantId}::uuid`
+      })
     }
   })
 
@@ -93,25 +91,30 @@ describe('kms encryption extension (eea1_declarations)', () => {
     const id = randomUUID()
     createdIds.push(id)
 
-    await prisma.eea1Declaration.create({
-      data: {
-        id,
-        tenantId,
-        employeeId: 'EMP-001',
-        name: 'Test Employee',
-        workplaceNumber: 'WP-001',
-        race: 'African',
-        gender: 'Female',
-        foreignNational: false,
-        signatureDataUrl: 'data:image/png;base64,PLAINTEXT_SIGNATURE',
-        declarationDate: new Date('2026-01-15'),
-      },
-    })
+    // Create and read back within one tenant-scoped transaction so the RLS
+    // GUC is in scope for the insert's WITH CHECK and the raw select.
+    const rows = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+      await tx.eea1Declaration.create({
+        data: {
+          id,
+          tenantId,
+          employeeId: 'EMP-001',
+          name: 'Test Employee',
+          workplaceNumber: 'WP-001',
+          race: 'African',
+          gender: 'Female',
+          foreignNational: false,
+          signatureDataUrl: 'data:image/png;base64,PLAINTEXT_SIGNATURE',
+          declarationDate: new Date('2026-01-15'),
+        },
+      })
 
-    const rows = await prisma.$queryRawUnsafe<RawEea1Row[]>(
-      `SELECT id, race, gender, "signatureDataUrl" FROM eea1_declarations WHERE id = $1`,
-      id,
-    )
+      return tx.$queryRawUnsafe<RawEea1Row[]>(
+        `SELECT id, race, gender, "signatureDataUrl" FROM eea1_declarations WHERE id = $1`,
+        id,
+      )
+    })
 
     expect(rows).toHaveLength(1)
     const row = rows[0]
