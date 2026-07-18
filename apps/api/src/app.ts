@@ -36,7 +36,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   void app.register(sensible)
   void app.register(helmet)
   void app.register(cors)
-  void app.register(rateLimit, { max: 100, timeWindow: '1 minute' })
+  // E2E suites run many parallel workers against seed + form routes and trip
+  // the production ceiling with ordinary test traffic; keep the limiter
+  // registered in test (so the plugin path is exercised) but effectively open.
+  void app.register(rateLimit, {
+    max: config.NODE_ENV === 'test' ? 10_000 : 100,
+    timeWindow: '1 minute',
+  })
 
   // Public routes (no auth)
   app.get('/health', () => ({ status: 'ok' }))
