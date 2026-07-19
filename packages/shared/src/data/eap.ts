@@ -92,24 +92,6 @@ const SOURCE = 'StatsSA QLFS Q1 2026 (P0211)'
 const QUARTER = 'QLFS-2026Q1'
 
 // ---------------------------------------------------------------------------
-// Dataset version
-// ---------------------------------------------------------------------------
-
-/**
- * Version identifier for the EAP dataset shipped in this module.
- *
- * PLACEHOLDER: the values below are demographically informed placeholders,
- * NOT licensed StatsSA QLFS figures. The "PLACEHOLDER" prefix is deliberate
- * and load-bearing — consumers persist this string alongside any EAP-derived
- * output so a saved record is auditable against the exact dataset that
- * produced its numbers, and a downstream reviewer can immediately tell the
- * figures were provisional. When the official QLFS Q4 2024 tabulations are
- * licensed and ingested, replace both the data and this identifier (dropping
- * the PLACEHOLDER prefix) in the same commit.
- */
-export const EAP_DATASET_VERSION = 'PLACEHOLDER-StatsSA-QLFS-Q4-2024' as const
-
-// ---------------------------------------------------------------------------
 // Provinces
 // ---------------------------------------------------------------------------
 

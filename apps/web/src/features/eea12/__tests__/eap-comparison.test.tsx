@@ -1,5 +1,5 @@
 import {
-  EAP_DATASET_VERSION,
+  EAP_VERSION,
   GN6124_VERSION,
   getSectorTargetByLevel,
   targetLevelForOccupationalLevel,
@@ -18,13 +18,16 @@ import { EEA12SectionC } from '../sections/eea12-section-c'
 
 // ---------------------------------------------------------------------------
 // Fixture — citizen-only workforce rows (foreign nationals already excluded by
-// decomposeEEA2Workforce per rule_eea_006). Chosen so every gap status appears:
-//   L1: 6 African (designated) + 4 White  -> actual 60.0, National EAP 69.5 -> gap
-//   L2: 8 African + 2 White               -> actual 80.0, National EAP 76.8 -> met
-//   L3: 7 Coloured (split disabled/non)   -> actual 70.0, National EAP 82.3 -> gap
+// decomposeEEA2Workforce per rule_eea_006). The EAP has no occupational-level
+// dimension, so the National designated benchmark is a uniform 92.4% across
+// every level (cited StatsSA QLFS Q1 2026). Rows are chosen so every gap status
+// still appears against that single benchmark:
+//   L1: 19 African (designated) + 1 White -> actual 95.0, EAP 92.4 -> met
+//   L2: 18 African + 2 White              -> actual 90.0, EAP 92.4 -> close
+//   L3: 7 Coloured (split disabled/non)   -> actual 70.0, EAP 92.4 -> gap
 //        + 3 White; the disability split must NOT affect the denominator.
-//   L4: 40 African + 10 White             -> actual 80.0, National EAP 84.5 -> close
-//   L5: empty                             -> actual 0.0,  National EAP 87.8 -> gap
+//   L4: 40 African + 10 White             -> actual 80.0, EAP 92.4 -> gap
+//   L5: empty                             -> actual 0.0,  EAP 92.4 -> gap
 // ---------------------------------------------------------------------------
 
 function mustFind<T>(value: T | undefined): T {
@@ -44,17 +47,17 @@ function row(
 }
 
 const FIXTURE_ROWS: WorkforceProfileRow[] = [
-  // L1 — designated share 6/10
-  row(1, 'A', 6),
-  row(1, 'W', 4),
-  // L2 — designated share 8/10
-  row(2, 'A', 8),
+  // L1 — designated share 19/20 = 95.0 (met vs EAP 92.4)
+  row(1, 'A', 19),
+  row(1, 'W', 1),
+  // L2 — designated share 18/20 = 90.0 (close vs EAP 92.4)
+  row(2, 'A', 18),
   row(2, 'W', 2),
-  // L3 — designated share 7/10, Coloured split across disability flag
+  // L3 — designated share 7/10 = 70.0, Coloured split across disability flag (gap)
   row(3, 'C', 3, true),
   row(3, 'C', 4, false),
   row(3, 'W', 3),
-  // L4 — designated share 40/50
+  // L4 — designated share 40/50 = 80.0 (gap)
   row(4, 'A', 40),
   row(4, 'W', 10),
   // L5 intentionally empty (zero-headcount level renders 0.0%)
@@ -68,16 +71,17 @@ interface ExpectedRow {
   readonly status: 'met' | 'close' | 'gap'
 }
 
-// EAP figures are the National designated (African + Coloured + Indian/Asian)
-// share per level from the placeholder QLFS dataset.
+// EAP figure is the National designated (African + Coloured + Indian/Asian)
+// share, uniform across every level (the cited QLFS Q1 2026 EAP has no
+// occupational-level dimension): 100 − National White (4.256 + 3.312) = 92.4.
 const EXPECTED_NATIONAL: readonly ExpectedRow[] = [
-  { level: 1, actualPct: 60, eapPct: 69.5, gapPct: -9.5, status: 'gap' },
-  { level: 2, actualPct: 80, eapPct: 76.8, gapPct: 3.2, status: 'met' },
-  { level: 3, actualPct: 70, eapPct: 82.3, gapPct: -12.3, status: 'gap' },
-  { level: 4, actualPct: 80, eapPct: 84.5, gapPct: -4.5, status: 'close' },
-  { level: 5, actualPct: 0, eapPct: 87.8, gapPct: -87.8, status: 'gap' },
-  { level: 6, actualPct: 0, eapPct: 89.5, gapPct: -89.5, status: 'gap' },
-  { level: 7, actualPct: 0, eapPct: 85.8, gapPct: -85.8, status: 'gap' },
+  { level: 1, actualPct: 95, eapPct: 92.4, gapPct: 2.6, status: 'met' },
+  { level: 2, actualPct: 90, eapPct: 92.4, gapPct: -2.4, status: 'close' },
+  { level: 3, actualPct: 70, eapPct: 92.4, gapPct: -22.4, status: 'gap' },
+  { level: 4, actualPct: 80, eapPct: 92.4, gapPct: -12.4, status: 'gap' },
+  { level: 5, actualPct: 0, eapPct: 92.4, gapPct: -92.4, status: 'gap' },
+  { level: 6, actualPct: 0, eapPct: 92.4, gapPct: -92.4, status: 'gap' },
+  { level: 7, actualPct: 0, eapPct: 92.4, gapPct: -92.4, status: 'gap' },
 ]
 
 // ---------------------------------------------------------------------------
@@ -120,7 +124,7 @@ describe('buildEapComparison — per-level figures', () => {
 
   it('carries both dataset versions for auditability', () => {
     const result = buildEapComparison(FIXTURE_ROWS, 'National')
-    expect(result.eapDatasetVersion).toBe(EAP_DATASET_VERSION)
+    expect(result.eapDatasetVersion).toBe(EAP_VERSION)
     expect(result.sectorTargetVersion).toBe(GN6124_VERSION)
   })
 })
@@ -254,7 +258,7 @@ describe('EEA12SectionC — persistence', () => {
       sectorTargetVersion: string
       province: string
     }
-    expect(data.eapDatasetVersion).toBe(EAP_DATASET_VERSION)
+    expect(data.eapDatasetVersion).toBe(EAP_VERSION)
     expect(data.sectorTargetVersion).toBe(GN6124_VERSION)
     expect(data.province).toBe('National')
     expect(data.rows).toHaveLength(EXPECTED_NATIONAL.length)

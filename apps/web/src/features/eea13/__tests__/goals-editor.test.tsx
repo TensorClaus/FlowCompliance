@@ -90,8 +90,11 @@ function renderYearlyPlans(
 }
 
 async function makeFirstGoalValid(user: ReturnType<typeof userEvent.setup>) {
+  // Default group A (African) is race-coded, so it is always EAP-bound. The
+  // National EAP share for African (QLFS Q1 2026) is 81.0%, so the target
+  // must be >= 81 to clear validation.
   await user.clear(screen.getByTestId('eea13-goal-target-1'))
-  await user.type(screen.getByTestId('eea13-goal-target-1'), '58')
+  await user.type(screen.getByTestId('eea13-goal-target-1'), '85')
   await user.type(screen.getByTestId('eea13-goal-timeframe-1'), 'By 31 December 2029')
   await user.type(screen.getByTestId('eea13-goal-target-date-1'), '2029-12-31')
   await user.type(screen.getByTestId('eea13-goal-measure-1-1'), 'Targeted recruitment')
@@ -100,10 +103,13 @@ async function makeFirstGoalValid(user: ReturnType<typeof userEvent.setup>) {
 describe('EEA13 goals editor', () => {
   it('blocks saving below the sectoral effective minimum', async () => {
     const user = userEvent.setup()
-    renderYearlyPlans()
+    // Agriculture's own sectoral targets (max 49.8/44) never exceed the
+    // National EAP aggregates (54.1 male / 45.9 female), so agriculture never
+    // binds sectoral. Accommodation & Food Service skilled_technical (level
+    // 4) designated female is gazetted at 46.1%, which does exceed the 45.9%
+    // National female EAP benchmark — so that combination is EAP-bound.
+    renderYearlyPlans({ sectorCode: 'accommodation_food_service' })
 
-    // Sectoral floors are gazetted only for gender groups at the top four
-    // levels: agriculture skilled_technical (level 4) designated female → 44%.
     await user.selectOptions(screen.getByTestId('eea13-goal-group-1'), 'F')
     await user.selectOptions(screen.getByTestId('eea13-goal-level-1'), '4')
     await makeFirstGoalValid(user)
@@ -121,9 +127,12 @@ describe('EEA13 goals editor', () => {
     const user = userEvent.setup()
     renderYearlyPlans()
 
+    // Group W (White) is race-coded, so it is always EAP-bound regardless of
+    // sector/level. The National EAP share for White (QLFS Q1 2026) is 7.6%,
+    // so a target of 5 falls below the EAP effective minimum.
     await user.selectOptions(screen.getByTestId('eea13-goal-group-1'), 'W')
     await user.clear(screen.getByTestId('eea13-goal-target-1'))
-    await user.type(screen.getByTestId('eea13-goal-target-1'), '29')
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '5')
     await user.type(screen.getByTestId('eea13-goal-timeframe-1'), 'By 31 December 2029')
     await user.type(screen.getByTestId('eea13-goal-target-date-1'), '2029-12-31')
     await user.type(screen.getByTestId('eea13-goal-measure-1-1'), 'Retention review')
@@ -139,10 +148,10 @@ describe('EEA13 goals editor', () => {
     renderYearlyPlans()
 
     await makeFirstGoalValid(user)
-    // Default group A is EAP-bound; type exactly the EAP benchmark (55) to
-    // exercise equality with the effective minimum.
+    // Default group A is EAP-bound; type exactly the National EAP benchmark
+    // (81.0%) to exercise equality with the effective minimum.
     await user.clear(screen.getByTestId('eea13-goal-target-1'))
-    await user.type(screen.getByTestId('eea13-goal-target-1'), '55')
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '81')
 
     expect(screen.getByTestId('eea13-goal-save-1')).not.toBeDisabled()
     await user.click(screen.getByTestId('eea13-goal-save-1'))
@@ -199,8 +208,8 @@ describe('EEA13 goals editor', () => {
       expect.objectContaining({
         occupationalLevel: 1,
         designatedGroup: 'A',
-        target: 58,
-        eapBenchmark: 55,
+        target: 85,
+        eapBenchmark: 81,
         currentRepresentation: 20,
       }),
     ])

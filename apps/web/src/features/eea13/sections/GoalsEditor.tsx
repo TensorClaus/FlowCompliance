@@ -4,7 +4,7 @@ import {
   OCCUPATIONAL_LEVEL_LABELS,
   PROVINCES,
   TIMEFRAME_ONGOING_MESSAGE,
-  getEapByProvinceAndLevel,
+  getEapByProvince,
   validateGoalAgainstMinimums,
   type EapComparisonRow,
   type EapProvince,
@@ -51,20 +51,16 @@ function resolveProvince(prefill: EEA13PrefillSource | undefined): EapProvince {
   return 'National'
 }
 
-function eapBenchmarkForGroup(
-  province: EapProvince,
-  level: OccupationalLevel,
-  group: DesignatedGroup,
-): number {
-  const points = getEapByProvinceAndLevel(province, level)
+function eapBenchmarkForGroup(province: EapProvince, group: DesignatedGroup): number {
+  const points = getEapByProvince(province)
   let total = 0
   for (const point of points) {
-    if (group === 'A' && point.race === 'African') total += point.percentage
-    if (group === 'C' && point.race === 'Coloured') total += point.percentage
-    if (group === 'I' && point.race === 'Indian/Asian') total += point.percentage
-    if (group === 'W' && point.race === 'White') total += point.percentage
-    if (group === 'M' && point.gender === 'Male') total += point.percentage
-    if (group === 'F' && point.gender === 'Female') total += point.percentage
+    if (group === 'A' && point.race === 'African') total += point.economicallyActivePct
+    if (group === 'C' && point.race === 'Coloured') total += point.economicallyActivePct
+    if (group === 'I' && point.race === 'Indian/Asian') total += point.economicallyActivePct
+    if (group === 'W' && point.race === 'White') total += point.economicallyActivePct
+    if (group === 'M' && point.gender === 'Male') total += point.economicallyActivePct
+    if (group === 'F' && point.gender === 'Female') total += point.economicallyActivePct
   }
   return roundOne(total)
 }
@@ -118,7 +114,7 @@ function defaultGoal(prefill: EEA13PrefillSource | undefined): NumericalGoal {
   const group: DesignatedGroup = 'A'
   const province = resolveProvince(prefill)
   const current = deriveCurrentRepresentation(prefill, level, group)
-  const eapBenchmark = eapBenchmarkForGroup(province, level, group)
+  const eapBenchmark = eapBenchmarkForGroup(province, group)
   return {
     occupationalLevel: level,
     designatedGroup: group,
@@ -151,8 +147,8 @@ export function GoalsEditor({
     [draft.designatedGroup, draft.occupationalLevel, prefill],
   )
   const eapBenchmark = useMemo(
-    () => eapBenchmarkForGroup(province, draft.occupationalLevel, draft.designatedGroup),
-    [draft.designatedGroup, draft.occupationalLevel, province],
+    () => eapBenchmarkForGroup(province, draft.designatedGroup),
+    [draft.designatedGroup, province],
   )
 
   useEffect(() => {

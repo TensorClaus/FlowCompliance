@@ -588,9 +588,13 @@ describe('SECTORAL MINIMUM', () => {
       expect.objectContaining({ code: 'TARGET_BELOW_EFFECTIVE_MINIMUM', binding: 'sectoral' }),
     )
 
-    renderYearlyPlans()
-    // Select a gender group + gazetted level that carries a sectoral floor
-    // above the EAP benchmark (level 4, designated female → 44%).
+    // Agriculture's own sectoral targets (max 49.8/44) never exceed the
+    // National EAP aggregates (54.1 male / 45.9 female), so agriculture never
+    // binds sectoral in the live component. Accommodation & Food Service
+    // skilled_technical (level 4) designated female is gazetted at 46.1%,
+    // which does exceed the 45.9% National female EAP benchmark — so that
+    // combination is sectoral-bound (effective minimum 46.1%).
+    renderYearlyPlans({ sectorCode: 'accommodation_food_service' })
     await user.selectOptions(screen.getByTestId('eea13-goal-group-1'), 'F')
     await user.selectOptions(screen.getByTestId('eea13-goal-level-1'), '4')
     await makeFirstGoalReady(user)
@@ -602,7 +606,7 @@ describe('SECTORAL MINIMUM', () => {
     expect(screen.getByTestId('eea13-goal-save-1')).toBeDisabled()
 
     await user.clear(screen.getByTestId('eea13-goal-target-1'))
-    await user.type(screen.getByTestId('eea13-goal-target-1'), '44')
+    await user.type(screen.getByTestId('eea13-goal-target-1'), '47')
     expect(screen.getByTestId('eea13-goal-save-1')).toBeEnabled()
   })
 
