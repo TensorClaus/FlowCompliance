@@ -43,6 +43,13 @@ const patchDraftBodySchema = z
   })
   .strict()
 
+// tenantId is accepted for the frontend's convenience but is NEVER used to scope
+// data — the authoritative tenant comes from the verified JWT (request.user).
+const prefillQuerySchema = z.object({
+  tenantId: z.uuid().optional(),
+  reportingYear: z.coerce.number().int().min(2000).max(2100),
+})
+
 type JsonObject = Record<string, unknown>
 
 function asJsonObject(value: unknown): JsonObject {
@@ -81,6 +88,39 @@ export function eea2Routes(app: FastifyInstance): void {
     })
 
     return reply.status(200).send({ drafts })
+  })
+
+  // GET /eea2/prefill — Section A pre-fill from the prior year's employer profile.
+  // Static route resolves ahead of /eea2/:id in the radix router. Returns only
+  // employer details (never workforce or remuneration data — Decisions Log
+  // 2026-03-23). barrierCategories is empty until a server-side barrier store
+  // exists (barriers currently live in EEA12/EEA2 draft state).
+  app.get<{ Querystring: Record<string, unknown> }>('/eea2/prefill', async (request, reply) => {
+    const parsed = prefillQuerySchema.safeParse(request.query)
+    if (!parsed.success) {
+      return reply.status(400).send({ error: 'Invalid query parameters' })
+    }
+
+    const { reportingYear } = parsed.data
+    const tenantId = request.user.tenantId
+
+    const employerProfile = await prisma.$transaction(async (tx) => {
+      await setTenantContext(tx, tenantId)
+      const priorYear = await tx.employerProfile.findFirst({
+        where: { tenantId, reportingYear: reportingYear - 1 },
+      })
+      if (priorYear !== null) {
+        return priorYear
+      }
+      // Fall back to the most recent profile before the requested year (e.g. a
+      // gap year), so a returning employer still pre-fills Section A.
+      return tx.employerProfile.findFirst({
+        where: { tenantId, reportingYear: { lt: reportingYear } },
+        orderBy: { reportingYear: 'desc' },
+      })
+    })
+
+    return reply.status(200).send({ employerProfile, barrierCategories: [] })
   })
 
   app.get<{ Params: { id: string } }>('/eea2/:id', async (request, reply) => {
