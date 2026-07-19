@@ -16,6 +16,10 @@ const PUBLIC_PREFIXES = [
   '/auth/login',
   '/auth/refresh',
   '/auth/totp/verify',
+  // Backup-code redemption authenticates a locked-out user, so it must bypass
+  // this guard like /auth/totp/verify. Admin reset (/auth/totp/reset) stays
+  // protected — it requires a valid ADMIN session.
+  '/auth/totp/backup/verify',
   '/test/seed', // test-only seed endpoint; never registered outside NODE_ENV=test
 ]
 const PUBLIC_EXACT = new Set(['/health'])

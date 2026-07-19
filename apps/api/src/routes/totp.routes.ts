@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto'
+import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import jwt from 'jsonwebtoken'
 import * as OTPAuth from 'otpauth'
@@ -26,6 +26,15 @@ const verifyBodySchema = z.object({
     .string()
     .length(TOTP_DIGITS, `code must be exactly ${String(TOTP_DIGITS)} digits`)
     .regex(/^\d+$/, 'code must contain only digits'),
+})
+
+const backupVerifyBodySchema = z.object({
+  userId: z.uuid('userId must be a valid UUID'),
+  code: z.string().min(1, 'code is required'),
+})
+
+const resetBodySchema = z.object({
+  userId: z.uuid('userId must be a valid UUID'),
 })
 
 // ─── JWT helpers ─────────────────────────────────────────────────────────────
@@ -68,6 +77,20 @@ function generateBackupCodes(): string[] {
     codes.push(randomBytes(BACKUP_CODE_LENGTH).toString('hex').slice(0, BACKUP_CODE_LENGTH))
   }
   return codes
+}
+
+// Keyed hash so a database leak alone cannot brute-force codes offline without
+// SESSION_SECRET. Codes are high-entropy and single-use, so a fast keyed hash is
+// appropriate here (unlike passwords).
+function hashBackupCode(code: string): string {
+  return createHmac('sha256', config.SESSION_SECRET).update(code).digest('hex')
+}
+
+// Constant-time comparison of two same-length hex digests.
+function backupCodeMatches(storedHash: string, candidateHash: string): boolean {
+  const stored = Buffer.from(storedHash, 'hex')
+  const candidate = Buffer.from(candidateHash, 'hex')
+  return stored.length === candidate.length && timingSafeEqual(stored, candidate)
 }
 
 // ─── Route registration ─────────────────────────────────────────────────────
@@ -116,16 +139,15 @@ export function totpRoutes(app: FastifyInstance): void {
     // SECURITY: plaintext secret is held only in local variables and never logged.
     const encryptedSecret = encrypt(secretBase32)
 
+    // Generate backup codes for account recovery. Only their HMAC hashes are
+    // persisted; the plaintext is returned once here and never stored or logged.
+    const backupCodes = generateBackupCodes()
+    const backupCodeHashes = backupCodes.map((code) => hashBackupCode(code))
+
     await prisma.user.update({
       where: { id: userId },
-      data: { totpSecret: encryptedSecret },
+      data: { totpSecret: encryptedSecret, totpBackupCodes: backupCodeHashes },
     })
-
-    // Generate backup codes for account recovery.
-    const backupCodes = generateBackupCodes()
-
-    // NOTE: In a full implementation, backup codes would also be hashed and
-    // stored. For this phase, they are returned once and not persisted.
 
     return reply.status(200).send({
       otpauthUri,
@@ -230,5 +252,100 @@ export function totpRoutes(app: FastifyInstance): void {
       enrolled,
       verified: false, // Determined by session state, not persisted here
     })
+  })
+
+  /**
+   * POST /auth/totp/backup/verify
+   *
+   * Redeems a single-use backup code for a user who cannot produce a TOTP code
+   * (e.g. lost device). The submitted code is HMAC-hashed and compared in
+   * constant time against the stored hashes; a match is consumed (removed) so
+   * each code works exactly once. Returns only { verified, remaining }.
+   */
+  app.post<{ Body: unknown }>('/auth/totp/backup/verify', async (request, reply) => {
+    const parseResult = backupVerifyBodySchema.safeParse(request.body)
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        issues: parseResult.error.issues.map((i) => ({
+          field: i.path.join('.'),
+          message: i.message,
+        })),
+      })
+    }
+
+    const { userId, code } = parseResult.data
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { totpBackupCodes: true },
+    })
+    if (user === null) {
+      return reply.status(404).send({ error: 'User not found' })
+    }
+
+    const candidateHash = hashBackupCode(code.trim())
+    const matchIndex = user.totpBackupCodes.findIndex((stored) =>
+      backupCodeMatches(stored, candidateHash),
+    )
+
+    if (matchIndex === -1) {
+      return reply.status(200).send({ verified: false })
+    }
+
+    // Consume the matched code so it can never be reused.
+    const remaining = user.totpBackupCodes.filter((_, index) => index !== matchIndex)
+    await prisma.user.update({
+      where: { id: userId },
+      data: { totpBackupCodes: remaining },
+    })
+
+    return reply.status(200).send({ verified: true, remaining: remaining.length })
+  })
+
+  /**
+   * POST /auth/totp/reset
+   *
+   * Admin-only recovery path: clears a target user's TOTP secret and backup
+   * codes so they can re-enrol after losing their device. Scoped to the admin's
+   * own tenant — an admin can never reset a user in another tenant.
+   */
+  app.post<{ Body: unknown }>('/auth/totp/reset', async (request, reply) => {
+    const tokenPayload = extractUserFromToken(request.headers.authorization)
+    if (tokenPayload === null) {
+      return reply.status(401).send({ error: 'Authentication required' })
+    }
+    if (tokenPayload.role !== 'ADMIN') {
+      return reply.status(403).send({ error: 'Admin role required' })
+    }
+
+    const parseResult = resetBodySchema.safeParse(request.body)
+    if (!parseResult.success) {
+      return reply.status(400).send({
+        error: 'Validation failed',
+        issues: parseResult.error.issues.map((i) => ({
+          field: i.path.join('.'),
+          message: i.message,
+        })),
+      })
+    }
+
+    const { userId } = parseResult.data
+
+    // Tenant-scoped: only users within the admin's own tenant can be reset.
+    const target = await prisma.user.findFirst({
+      where: { id: userId, tenantId: tokenPayload.tenantId },
+      select: { id: true },
+    })
+    if (target === null) {
+      return reply.status(404).send({ error: 'User not found' })
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { totpSecret: null, totpBackupCodes: [] },
+    })
+
+    return reply.status(200).send({ reset: true })
   })
 }
