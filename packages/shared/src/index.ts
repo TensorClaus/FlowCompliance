@@ -247,7 +247,7 @@ export {
 // EAP reference data — StatsSA QLFS
 // Note: EapProvince replaces Province to avoid collision with enums.js Province.
 export {
-  EAP_DATASET_VERSION,
+  EAP_VERSION,
   PROVINCES,
   type EapProvince,
   type EapDataPoint,

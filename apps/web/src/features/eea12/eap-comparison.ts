@@ -1,7 +1,7 @@
 import {
-  EAP_DATASET_VERSION,
+  EAP_VERSION,
   GN6124_VERSION,
-  getEapByProvinceAndLevel,
+  getEapByProvince,
   getSectorTargetByLevel,
   targetLevelForOccupationalLevel,
   type EapProvince,
@@ -25,10 +25,13 @@ import { classify, type GapStatus } from '../compliance/lib/gap-status'
  *      display-only baseline; it is NOT part of the gap calculation.
  *
  * PROVISIONAL DATA: every EAP-derived field (eapPct, gapPct, status) is
- * produced from PLACEHOLDER StatsSA figures (see EAP_DATASET_VERSION). Callers
- * MUST surface a provisional marker on every EAP-derived cell and persist the
- * dataset versions so saved forms are auditable. This module never blocks on
- * EAP-derived values — the blocking constraint lives in EEA13.
+ * produced from cited StatsSA QLFS Q1 2026 figures (see EAP_VERSION) that remain
+ * provisional pending reference-quarter confirmation — the EE Regulations
+ * reference the Q3-of-reporting-year EAP, so the final marker wording is tracked
+ * in the reference-quarter ruling. Callers MUST surface a provisional marker on
+ * every EAP-derived cell and persist the dataset versions so saved forms are
+ * auditable. This module never blocks on EAP-derived values — the blocking
+ * constraint lives in EEA13.
  *
  * Reference rules: rule_eea_005, rule_eea_008, rule_eea_009
  */
@@ -99,7 +102,7 @@ export interface EapComparisonResult {
   readonly rows: EapComparisonRow[]
   readonly context: EapComparisonRowContext[]
   /** Dataset version for the EAP figures — persist for auditability. */
-  readonly eapDatasetVersion: typeof EAP_DATASET_VERSION
+  readonly eapDatasetVersion: typeof EAP_VERSION
   /** Dataset version for the GN 6124 sector targets — persist for auditability. */
   readonly sectorTargetVersion: typeof GN6124_VERSION
   /** Province actually used for the EAP lookup (after National fallback). */
@@ -127,15 +130,17 @@ function sharePct(part: number, whole: number): number {
 }
 
 /**
- * Designated-group share of the EAP for a province + level, on a 0–100 scale.
- * Sums the EAP percentages of African, Coloured and Indian/Asian across both
- * genders. Returns 0 when the province/level slice is absent.
+ * Designated-group share of the EAP for a province, on a 0–100 scale. Sums the
+ * EAP percentages of African, Coloured and Indian/Asian across both genders.
+ * The StatsSA QLFS EAP is not broken down by occupational level, so this
+ * province-wide share is the benchmark applied uniformly to every level.
+ * Returns 0 when the province slice is absent.
  */
-function eapDesignatedPct(province: EapProvince, level: OccupationalLevel): number {
-  const points = getEapByProvinceAndLevel(province, level)
+function eapDesignatedPct(province: EapProvince): number {
+  const points = getEapByProvince(province)
   let total = 0
   for (const point of points) {
-    if (DESIGNATED_EAP_RACES.has(point.race)) total += point.percentage
+    if (DESIGNATED_EAP_RACES.has(point.race)) total += point.economicallyActivePct
   }
   return roundOneDecimal(total)
 }
@@ -178,7 +183,8 @@ function actualDesignatedPct(
  *                 sector target), and the dataset versions to persist.
  *
  * actualPct  = designated-citizen headcount / total citizen headcount × 100.
- * eapPct     = designated-group EAP share for the province + level.
+ * eapPct     = designated-group EAP share for the province (uniform across
+ *              levels; the EAP has no occupational-level dimension).
  * gapPct     = actualPct − eapPct (one decimal).
  * status     = classify(gapPct) — advisory only; never blocks here.
  */
@@ -192,9 +198,12 @@ export function buildEapComparison(
   const comparisonRows: EapComparisonRow[] = []
   const context: EapComparisonRowContext[] = []
 
+  // The EAP has no occupational-level dimension; the province-wide designated
+  // share is the benchmark for every level (uniform-province-benchmark model).
+  const eapPct = eapDesignatedPct(resolvedProvince)
+
   for (const level of OCCUPATIONAL_LEVELS) {
     const actual = actualDesignatedPct(rows, level)
-    const eapPct = eapDesignatedPct(resolvedProvince, level)
     const gapPct = roundOneDecimal(actual.pct - eapPct)
     const status = classify(gapPct)
 
@@ -222,7 +231,7 @@ export function buildEapComparison(
   return {
     rows: comparisonRows,
     context,
-    eapDatasetVersion: EAP_DATASET_VERSION,
+    eapDatasetVersion: EAP_VERSION,
     sectorTargetVersion: GN6124_VERSION,
     province: resolvedProvince,
   }

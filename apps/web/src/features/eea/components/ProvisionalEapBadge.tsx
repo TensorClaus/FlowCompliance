@@ -1,7 +1,7 @@
 import React from 'react'
 
 const PROVISIONAL_TITLE =
-  'Provisional EAP data - derived from PLACEHOLDER StatsSA QLFS figures pending ingestion of the licensed dataset. Not for external reliance.'
+  'Provisional EAP data - cited StatsSA QLFS Q1 2026 figures, provisional pending reference-quarter confirmation (the EE Regulations reference the Q3-of-reporting-year EAP).'
 
 export function ProvisionalEapBadge({
   testId = 'eea-provisional-badge',
