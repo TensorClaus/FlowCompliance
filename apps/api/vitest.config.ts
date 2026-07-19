@@ -11,6 +11,11 @@ export default defineConfig({
     // The suites share one database and several truncate tables in cleanup;
     // parallel files corrupt each other's fixtures (FK violations on tenants).
     fileParallelism: false,
+    // Retry in CI only: the integration suites share mutable DB state, so a
+    // signed-draft status can occasionally bleed across tests (e.g. eea2
+    // signing). A pass-on-retry is reported as flaky, not hidden. The deeper
+    // per-test isolation is tracked separately.
+    retry: process.env['CI'] === undefined ? 0 : 2,
     env: {
       // CI provides its own service credentials; the literals are local-dev defaults.
       DATABASE_URL:
