@@ -10,6 +10,10 @@ const PUBLIC_PREFIXES = [
   '/auth/login',
   '/auth/refresh',
   '/auth/totp/verify',
+  // Backup-code redemption is an authentication primitive (a locked-out user has
+  // no verified session yet), so it must be reachable without a Bearer token —
+  // just like /auth/totp/verify. Admin reset (/auth/totp/reset) is NOT public.
+  '/auth/totp/backup/verify',
   '/test/seed', // test-only seed endpoint; never registered outside NODE_ENV=test
 ]
 const PUBLIC_EXACT = new Set(['/health'])

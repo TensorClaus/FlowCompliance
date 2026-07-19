@@ -8,6 +8,7 @@
  * All external dependencies (Prisma, Better Auth, KMS) are mocked so
  * tests run without a database, Redis, or AWS credentials.
  */
+import { createHmac } from 'node:crypto'
 import type { FastifyInstance } from 'fastify'
 import jwt from 'jsonwebtoken'
 import * as OTPAuth from 'otpauth'
@@ -29,6 +30,7 @@ const TEST_JWT_SECRET = process.env['SESSION_SECRET'] ?? ''
 const { mockPrisma, mockPrismaUser, mockPrismaTenant, mockBetterAuthApi } = vi.hoisted(() => {
   const mockPrismaUser = {
     findUnique: vi.fn(),
+    findFirst: vi.fn(),
     upsert: vi.fn(),
     update: vi.fn(),
   }
@@ -100,6 +102,11 @@ function issueTestToken(opts: TokenOptions = {}): string {
 
 function issueRefreshToken(sub: string = USER_ID, tenantId: string = TENANT_A_ID): string {
   return jwt.sign({ sub, tenantId, tokenType: 'refresh' }, TEST_JWT_SECRET, { expiresIn: 604_800 })
+}
+
+// Mirrors hashBackupCode in totp.routes.ts (HMAC-SHA256 keyed by SESSION_SECRET).
+function hashCode(code: string): string {
+  return createHmac('sha256', TEST_JWT_SECRET).update(code).digest('hex')
 }
 
 function issueExpiredToken(): string {
@@ -384,6 +391,169 @@ describe('POST /auth/totp/enrol', () => {
     })
 
     expect(res.statusCode).toBe(404)
+  })
+
+  it('persists hashed backup codes, never the plaintext', async () => {
+    mockPrismaUser.findUnique.mockResolvedValue({
+      id: USER_ID,
+      email: TEST_EMAIL,
+      tenantId: TENANT_A_ID,
+      role: 'EE_MANAGER',
+      totpSecret: null,
+    })
+    mockPrismaUser.update.mockResolvedValue({})
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/enrol',
+      headers: { authorization: `Bearer ${issueTestToken()}` },
+    })
+
+    expect(res.statusCode).toBe(200)
+    const body = res.json<{ backupCodes: string[] }>()
+    const updateArg = mockPrismaUser.update.mock.calls[0]?.[0] as {
+      data: { totpBackupCodes: string[] }
+    }
+
+    expect(updateArg.data.totpBackupCodes).toHaveLength(8)
+    for (const code of body.backupCodes) {
+      expect(updateArg.data.totpBackupCodes).not.toContain(code)
+      expect(updateArg.data.totpBackupCodes).toContain(hashCode(code))
+    }
+  })
+})
+
+// ===========================================================================
+// 3b. TOTP backup-code redemption
+// ===========================================================================
+
+describe('POST /auth/totp/backup/verify', () => {
+  it('redeems a valid single-use backup code and consumes it', async () => {
+    const good = 'a1b2c3d4'
+    const other = 'f9f9f9f9'
+    mockPrismaUser.findUnique.mockResolvedValue({
+      totpBackupCodes: [hashCode(good), hashCode(other)],
+    })
+    mockPrismaUser.update.mockResolvedValue({})
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/backup/verify',
+      payload: { userId: USER_ID, code: good },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ verified: true, remaining: 1 })
+    expect(mockPrismaUser.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: USER_ID },
+        data: { totpBackupCodes: [hashCode(other)] },
+      }),
+    )
+  })
+
+  it('rejects an unknown code without consuming any', async () => {
+    mockPrismaUser.findUnique.mockResolvedValue({ totpBackupCodes: [hashCode('a1b2c3d4')] })
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/backup/verify',
+      payload: { userId: USER_ID, code: 'ffffffff' },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ verified: false })
+    expect(mockPrismaUser.update).not.toHaveBeenCalled()
+  })
+
+  it('returns 404 when the user does not exist', async () => {
+    mockPrismaUser.findUnique.mockResolvedValue(null)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/backup/verify',
+      payload: { userId: USER_ID, code: 'a1b2c3d4' },
+    })
+
+    expect(res.statusCode).toBe(404)
+  })
+
+  it('returns 400 for an invalid body', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/backup/verify',
+      payload: { userId: 'not-a-uuid', code: '' },
+    })
+
+    expect(res.statusCode).toBe(400)
+  })
+})
+
+// ===========================================================================
+// 3c. Admin TOTP reset
+// ===========================================================================
+
+describe('POST /auth/totp/reset', () => {
+  const TARGET_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+
+  it('lets an admin clear a user TOTP within their own tenant', async () => {
+    mockPrismaUser.findFirst.mockResolvedValue({ id: TARGET_ID })
+    mockPrismaUser.update.mockResolvedValue({})
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/reset',
+      headers: { authorization: `Bearer ${issueTestToken({ role: 'ADMIN' })}` },
+      payload: { userId: TARGET_ID },
+    })
+
+    expect(res.statusCode).toBe(200)
+    expect(res.json()).toEqual({ reset: true })
+    expect(mockPrismaUser.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: TARGET_ID, tenantId: TENANT_A_ID } }),
+    )
+    expect(mockPrismaUser.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: TARGET_ID },
+        data: { totpSecret: null, totpBackupCodes: [] },
+      }),
+    )
+  })
+
+  it('returns 403 for a non-admin caller', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/reset',
+      headers: { authorization: `Bearer ${issueTestToken({ role: 'CEO' })}` },
+      payload: { userId: TARGET_ID },
+    })
+
+    expect(res.statusCode).toBe(403)
+    expect(mockPrismaUser.update).not.toHaveBeenCalled()
+  })
+
+  it('returns 401 without an authorization header', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/reset',
+      payload: { userId: TARGET_ID },
+    })
+
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('returns 404 when the target user is outside the admin tenant', async () => {
+    mockPrismaUser.findFirst.mockResolvedValue(null)
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/auth/totp/reset',
+      headers: { authorization: `Bearer ${issueTestToken({ role: 'ADMIN' })}` },
+      payload: { userId: TARGET_ID },
+    })
+
+    expect(res.statusCode).toBe(404)
+    expect(mockPrismaUser.update).not.toHaveBeenCalled()
   })
 })
 

@@ -714,7 +714,7 @@ describe('EEA hooks and wizard', () => {
     })
   })
 
-  it('useEEAWizard latches compliance flags once active', () => {
+  it('latches barrier/accommodation event flags but recomputes disability live', () => {
     const { result } = renderHook(() => useEEAWizard({ formId: 'form-123' }))
 
     act(() => {
@@ -739,11 +739,76 @@ describe('EEA hooks and wizard', () => {
       })
     })
 
+    // Disability representation is a live condition (rule_eea_013): a compliant
+    // count clears it. The two event flags record something that occurred in the
+    // reporting period, so they stay latched once raised.
     expect(result.current.wizardContext).toMatchObject({
-      disabilityFlagActive: true,
+      disabilityFlagActive: false,
       barrierTerminationFlag: true,
       accommodationOverdueFlag: true,
     })
+  })
+
+  it('SectionC1 shows the disability banner for a designated employer below 3%', () => {
+    renderRegistryStep('section-c1', {
+      formState: { 'section-c1': matrixWithHeadcount(100) },
+      wizardContext: { ...defaultWizardContext, disabilityHeadcount: 0 },
+    })
+
+    expect(screen.getByTestId('disability-flag-banner')).toBeInTheDocument()
+  })
+
+  it('SectionC1 clears the disability banner once a compliant count is captured', () => {
+    // 100 employees, 5 with disabilities = 5% >= 3% target → flag must NOT fire.
+    renderRegistryStep('section-c1', {
+      formState: { 'section-c1': matrixWithHeadcount(100) },
+      wizardContext: { ...defaultWizardContext, disabilityHeadcount: 5 },
+    })
+
+    expect(screen.queryByTestId('disability-flag-banner')).not.toBeInTheDocument()
+  })
+
+  it('SectionC1 does not fire the disability flag below the designated threshold', () => {
+    // 10 employees (< 50) is not a designated employer, so rule_eea_013 is inert.
+    renderRegistryStep('section-c1', {
+      formState: { 'section-c1': matrixWithHeadcount(10) },
+      wizardContext: { ...defaultWizardContext, disabilityHeadcount: 0 },
+    })
+
+    expect(screen.queryByTestId('disability-flag-banner')).not.toBeInTheDocument()
+  })
+
+  it('SectionC1 captures the disability headcount through the manual input', () => {
+    const updateWizardContext = vi.fn()
+    const Step = STEP_REGISTRY['section-c1']?.component
+    if (Step === undefined) throw new Error('Missing section-c1 step')
+
+    render(
+      <WizardFormContext.Provider
+        value={{
+          tenantId: '',
+          reportingYear: 2026,
+          prefillOptions: { autoLoad: false },
+          formState: { 'section-c1': matrixWithHeadcount(100) },
+          setStepData: vi.fn(),
+        }}
+      >
+        <Step
+          completedSteps={new Set()}
+          formId="form-123"
+          goToStep={vi.fn()}
+          onAdvance={vi.fn()}
+          updateWizardContext={updateWizardContext}
+          wizardContext={{ ...defaultWizardContext, disabilityHeadcount: 0 }}
+        />
+      </WizardFormContext.Provider>,
+    )
+
+    fireEvent.change(screen.getByLabelText('Employees with disabilities'), {
+      target: { value: '7' },
+    })
+
+    expect(updateWizardContext).toHaveBeenCalledWith({ disabilityHeadcount: 7 })
   })
 
   it('useEEAWizard gates advance on schema validity and stores Section B totals', async () => {
@@ -916,7 +981,7 @@ describe('EEA hooks and wizard', () => {
     expect(patchDraftState).toHaveBeenCalledTimes(2)
   })
 
-  it('Section C1 sets the disability flag reactively and never auto-clears it', async () => {
+  it('Section C1 shows a non-dismissible disability banner that clears when compliant', async () => {
     const user = userEvent.setup()
 
     render(
@@ -943,15 +1008,21 @@ describe('EEA hooks and wizard', () => {
     )
 
     await user.click(screen.getByRole('button', { name: 'Section C - Current workforce' }))
+
+    // Designated employer (100 employees), 0 with disabilities → banner fires and
+    // cannot be dismissed (rule_eea_013).
     expect(await screen.findByTestId('disability-flag-banner')).toBeInTheDocument()
-
-    const firstInput = screen.getAllByRole('spinbutton')[0]
-    await user.clear(firstInput as HTMLElement)
-    await user.type(firstInput as HTMLElement, '0')
-
-    expect(screen.getByTestId('disability-flag-banner')).toBeInTheDocument()
     expect(document.querySelector('[data-dismiss]')).toBeNull()
     expect(document.querySelector('[data-close]')).toBeNull()
+
+    // Capture a compliant count (5 of 100 = 5% >= 3%) → the live banner clears.
+    fireEvent.change(screen.getByLabelText('Employees with disabilities'), {
+      target: { value: '5' },
+    })
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('disability-flag-banner')).not.toBeInTheDocument()
+    })
   })
 
   it('Section C2 pre-fills latest EEA13 goals and renders blank on 404', async () => {
