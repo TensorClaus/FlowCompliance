@@ -151,6 +151,10 @@ model Eea1Declaration {
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
 
+  // Every RLS policy filters by tenantId; without this index tenant-scoped reads
+  // seq-scan as the table grows. Restores the M-005 index dropped by migration
+  // 20260514162526_add_user_name.
+  @@index([tenantId])
   @@map("eea1_declarations")
 }
 
