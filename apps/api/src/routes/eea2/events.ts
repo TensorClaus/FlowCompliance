@@ -206,11 +206,19 @@ export function eea2EventsRoutes(app: FastifyInstance): void {
       // Fetch limit+1 to detect whether a next page exists.
       const fetchLimit = limit + 1
 
-      const rawEvents = await prisma.eeaEvent.findMany({
-        where,
-        orderBy: { createdAt: 'desc' },
-        take: fetchLimit,
-        ...(cursorArg === undefined ? {} : { cursor: cursorArg, skip: 1 }),
+      // Every RLS-scoped read MUST run inside a transaction that first sets
+      // app.tenant_id via set_config. SET LOCAL from tenant-context's onRequest
+      // hook runs outside a transaction and is a silent no-op, so a bare query
+      // here would evaluate the RLS predicate against an empty GUC and Postgres
+      // would raise `invalid input syntax for type uuid: ""` on the ''::uuid cast.
+      const rawEvents = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+        return tx.eeaEvent.findMany({
+          where,
+          orderBy: { createdAt: 'desc' },
+          take: fetchLimit,
+          ...(cursorArg === undefined ? {} : { cursor: cursorArg, skip: 1 }),
+        })
       })
 
       let nextCursor: string | null = null
@@ -256,26 +264,35 @@ export function eea2EventsRoutes(app: FastifyInstance): void {
       const { formId } = request.params
       const tenantId = request.user.tenantId
 
-      // Resolve the target event to get its timestamp.
-      // The replayTo helper replays all events up to a given timestamp.
-      const targetEvent = await prisma.eeaEvent.findFirst({
-        where: {
-          id: toEventId,
-          formId,
-          // tenantId filter here is defence-in-depth on top of RLS.
-          tenantId,
-        },
-      })
-
-      if (targetEvent === null) {
-        return reply.status(404).send({ error: 'Event not found or outside tenant scope' })
-      }
-
-      // Replay the stream within a transaction so the RLS GUC set by
-      // tenant-context's onRequest hook is in scope for every statement.
+      // Resolve the target event and replay within one transaction so the RLS
+      // GUC (app.tenant_id) is in scope for every statement. tenant-context's
+      // SET LOCAL runs outside a transaction and is a silent no-op, so without
+      // this set_config the RLS predicate casts an empty GUC (''::uuid) and
+      // Postgres raises `invalid input syntax for type uuid: ""`.
       const snapshot = await prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT set_config('app.tenant_id', ${tenantId}, true)`
+
+        // The replayTo helper replays all events up to a given timestamp.
+        const targetEvent = await tx.eeaEvent.findFirst({
+          where: {
+            id: toEventId,
+            formId,
+            // tenantId filter here is defence-in-depth on top of RLS. A cross-
+            // tenant id is invisible to this scope and resolves to null → 404.
+            tenantId,
+          },
+        })
+
+        if (targetEvent === null) {
+          return null
+        }
+
         return replayTo(tenantId, formId, targetEvent.createdAt, tx)
       })
+
+      if (snapshot === null) {
+        return reply.status(404).send({ error: 'Event not found or outside tenant scope' })
+      }
 
       return reply.status(200).send(snapshot)
     },

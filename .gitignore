@@ -9,6 +9,11 @@ dist/
 coverage/
 graphify-out/
 runs/
+playwright-report/
+test-results/
 
 # Local Claude Code settings
 .claude/
+
+# Planning Files
+.planning/
