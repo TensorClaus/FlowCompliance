@@ -531,6 +531,11 @@ export function SectionBStep({ isLocked = false }: StepProps) {
   )
 }
 
+// EEA designated-employer threshold (rule_eea_001) and the disability
+// representation target the flag checks against (rule_eea_013 / EEA s27).
+const DESIGNATED_EMPLOYER_THRESHOLD = 50
+const DISABILITY_TARGET_PERCENTAGE = 3
+
 export function SectionC1Step({
   formId,
   isLocked = false,
@@ -543,11 +548,20 @@ export function SectionC1Step({
   const expected = wizardContext.sectionBTotals?.grandTotal ?? null
   const hasMismatch = expected !== null && actual !== expected
 
+  // rule_eea_013 / EEA s27: designated employers (50+ employees) must reach 3%
+  // disability representation. The count is captured manually below; the flag is
+  // a live condition that clears once a compliant count is entered.
+  const disabilityHeadcount = wizardContext.disabilityHeadcount ?? 0
+  const isDesignatedEmployer = actual >= DESIGNATED_EMPLOYER_THRESHOLD
+  const disabilityPercentage = actual > 0 ? (disabilityHeadcount / actual) * 100 : 0
+  const disabilityFlagActive =
+    isDesignatedEmployer && actual > 0 && disabilityPercentage < DISABILITY_TARGET_PERCENTAGE
+
   useEffect(() => {
-    if (actual > 0 && 0 / actual < 0.03) {
-      updateWizardContext({ disabilityFlagActive: true })
+    if (wizardContext.disabilityFlagActive !== disabilityFlagActive) {
+      updateWizardContext({ disabilityFlagActive })
     }
-  }, [actual, updateWizardContext])
+  }, [disabilityFlagActive, wizardContext.disabilityFlagActive, updateWizardContext])
 
   return (
     <section aria-label="Section C current workforce" className="grid gap-4">
@@ -560,32 +574,50 @@ export function SectionC1Step({
           entered in Section B.
         </div>
       ) : null}
-      {wizardContext.disabilityFlagActive ? (
-        <DisabilityFlagBanner headcount={0} percentage={0} total={Math.max(actual, 1)} />
-      ) : null}
+      {/* The banner is rendered by OccupationalMatrix itself (its canonical
+          owner, Phase 8.8) once it receives isDesignatedEmployer + the real
+          disability headcount below. The step only mirrors the flag into wizard
+          context for the review step and the submit gate. */}
       <OccupationalMatrixComponent
         autosaveOptions={{
           endpoint: `/api/eea2/${encodeURIComponent(formId)}/events`,
           retryOnFailure: true,
         }}
         data={matrix}
-        disabilityHeadcount={0}
+        disabilityHeadcount={disabilityHeadcount}
         eventContext={{
           tenantId,
           formId,
           triggeredBy: 'browser-session',
           sessionId: formId,
         }}
-        isDesignatedEmployer={false}
+        isDesignatedEmployer={isDesignatedEmployer}
         mode={isLocked ? 'locked' : 'edit'}
         onChange={(updated): void => {
           setStepData('section-c1', updated)
-          const grandTotal = updated.grandTotal.total.value
-          if (grandTotal > 0 && 0 / grandTotal < 0.03) {
-            updateWizardContext({ disabilityFlagActive: true })
-          }
         }}
       />
+      <label className="flex flex-col gap-1 text-sm" htmlFor="disability-headcount">
+        <span>Employees with disabilities</span>
+        {isLocked ? (
+          <span>{disabilityHeadcount}</span>
+        ) : (
+          <input
+            aria-label="Employees with disabilities"
+            className="w-28 rounded border border-slate-300 px-2 py-1"
+            id="disability-headcount"
+            min={0}
+            onChange={(event): void => {
+              const parsed = Number(event.target.value)
+              updateWizardContext({
+                disabilityHeadcount: Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0,
+              })
+            }}
+            type="number"
+            value={disabilityHeadcount}
+          />
+        )}
+      </label>
     </section>
   )
 }
@@ -819,6 +851,11 @@ function ReviewStep({
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  const reviewGrandTotal = wizardContext.sectionBTotals?.grandTotal ?? 0
+  const reviewDisabilityHeadcount = wizardContext.disabilityHeadcount ?? 0
+  const reviewDisabilityPct =
+    reviewGrandTotal > 0 ? (reviewDisabilityHeadcount / reviewGrandTotal) * 100 : 0
+
   const isSubmitDisabled = useMemo(() => {
     const hasIncompleteStep = reviewSections.some(([stepId]) => !completedSteps.has(stepId))
     return (
@@ -855,10 +892,10 @@ function ReviewStep({
     <section aria-label="Review and submit" className="grid gap-4">
       {wizardContext.disabilityFlagActive ? (
         <DisabilityFlagBanner
-          headcount={0}
-          percentage={0}
+          headcount={reviewDisabilityHeadcount}
+          percentage={reviewDisabilityPct}
           testId="review-disability-flag"
-          total={1}
+          total={Math.max(reviewGrandTotal, 1)}
         />
       ) : null}
       {wizardContext.barrierTerminationFlag ? <BarrierTerminationBanner /> : null}

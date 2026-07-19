@@ -34,6 +34,7 @@ export interface UseEEAWizardResult {
 
 const defaultWizardContext: WizardContext = {
   disabilityFlagActive: false,
+  disabilityHeadcount: 0,
   barrierTerminationFlag: false,
   accommodationOverdueFlag: false,
   sectionBTotals: null,
@@ -121,10 +122,12 @@ export function useEEAWizard({
     setWizardContext((previous) => ({
       ...previous,
       ...patch,
-      disabilityFlagActive:
-        previous.disabilityFlagActive || patch.disabilityFlagActive === true
-          ? true
-          : (patch.disabilityFlagActive ?? previous.disabilityFlagActive),
+      // disabilityFlagActive is a live condition (rule_eea_013): it must clear
+      // when a compliant disability count is captured, so it is NOT latched.
+      // The banner enforces non-suppression by having no dismiss control; the
+      // submit gate blocks while the condition holds. The two flags below are
+      // records of events that occurred in the reporting period, so they latch.
+      disabilityFlagActive: patch.disabilityFlagActive ?? previous.disabilityFlagActive,
       barrierTerminationFlag:
         previous.barrierTerminationFlag || patch.barrierTerminationFlag === true
           ? true

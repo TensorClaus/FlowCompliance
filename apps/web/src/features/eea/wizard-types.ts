@@ -4,7 +4,13 @@ import type { z } from 'zod'
 export type StepId = string
 
 export type WizardContext = {
+  // Live condition, recomputed from the manually-captured disability headcount
+  // against the workforce total (rule_eea_013). Unlike the two event flags below
+  // it is NOT latched — a compliant count clears it.
   disabilityFlagActive: boolean
+  // Manually-captured count of employees with disabilities (Section C1).
+  // Optional so existing context literals stay valid; absent = 0 captured.
+  disabilityHeadcount?: number
   barrierTerminationFlag: boolean
   accommodationOverdueFlag: boolean
   sectionBTotals: {
