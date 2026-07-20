@@ -242,7 +242,7 @@ export function eea2Routes(app: FastifyInstance): void {
     async (request, reply) => {
       const { formId } = request.params
       const tenantId = request.user.tenantId
-      return prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         await setTenantContext(tx, tenantId)
         const draft = await findDraftForMutation(tx, formId, tenantId)
 
@@ -270,15 +270,21 @@ export function eea2Routes(app: FastifyInstance): void {
           } as Prisma.InputJsonValue
         }
 
-        await tx.eea2Draft.update({ where: { id: formId }, data })
+        const updated = await tx.eea2Draft.update({
+          where: { id: formId },
+          data,
+          select: { status: true },
+        })
 
-        return reply.status(200).send({ status: parsed.data.status ?? draft.status })
+        return { status: updated.status }
       })
+      if (reply.sent) return result
+      return reply.status(200).send(result)
     },
   )
 
   app.put<{ Params: { id: string }; Body: unknown }>('/eea2/:id', async (request, reply) => {
-    return prisma.$transaction(async (tx) => {
+    const result = await prisma.$transaction(async (tx) => {
       await setTenantContext(tx, request.user.tenantId)
       const draft = await findDraftForMutation(tx, request.params.id, request.user.tenantId)
 
@@ -295,7 +301,7 @@ export function eea2Routes(app: FastifyInstance): void {
         return reply.status(400).send({ error: 'Invalid request body' })
       }
 
-      await tx.eea2Draft.update({
+      const updated = await tx.eea2Draft.update({
         where: { id: request.params.id },
         data: {
           ...(parsed.data.status === undefined ? {} : { status: parsed.data.status }),
@@ -308,10 +314,13 @@ export function eea2Routes(app: FastifyInstance): void {
                 } as Prisma.InputJsonValue,
               }),
         },
+        select: { status: true },
       })
 
-      return reply.status(200).send({ status: parsed.data.status ?? draft.status })
+      return { status: updated.status }
     })
+    if (reply.sent) return result
+    return reply.status(200).send(result)
   })
 
   app.post<{ Params: { formId: string }; Body: unknown }>(
@@ -330,7 +339,7 @@ export function eea2Routes(app: FastifyInstance): void {
         return reply.status(400).send({ error: 'Confirmation is required' })
       }
 
-      return prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         await setTenantContext(tx, request.user.tenantId)
         const userId = getUserId(request.user)
         const user = await tx.user.findFirst({
@@ -387,8 +396,10 @@ export function eea2Routes(app: FastifyInstance): void {
           data: { status: 'signed' },
         })
 
-        return reply.status(200).send({ status: 'signed' })
+        return { status: 'signed' }
       })
+      if (reply.sent) return result
+      return reply.status(200).send(result)
     },
   )
 
@@ -406,7 +417,7 @@ export function eea2Routes(app: FastifyInstance): void {
       const { formId } = request.params
       const tenantId = request.user.tenantId
       const userId = getUserId(request.user)
-      return prisma.$transaction(async (tx) => {
+      const result = await prisma.$transaction(async (tx) => {
         await setTenantContext(tx, tenantId)
         const draft = await tx.eea2Draft.findFirst({
           where: { id: formId, tenantId },
@@ -454,8 +465,10 @@ export function eea2Routes(app: FastifyInstance): void {
           })
         }
 
-        return reply.status(200).send({ status: 'draft' })
+        return { status: 'draft' }
       })
+      if (reply.sent) return result
+      return reply.status(200).send(result)
     },
   )
 }

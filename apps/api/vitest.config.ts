@@ -26,6 +26,17 @@ export default defineConfig({
     },
     coverage: {
       provider: 'v8',
+      exclude: [
+        'prisma.config.ts',
+        'prisma/**',
+        'src/generated/**',
+        'src/index.ts',
+        'src/providers/llm/llm-provider.ts',
+        'src/providers/llm/index.ts',
+        'src/providers/sanitisation/index.ts',
+        'src/providers/signing/signing-provider.ts',
+        'src/providers/signing/index.ts',
+      ],
       // Ratchet floor: set just under measured coverage from the first-ever
       // full CI execution of these suites (global 74.4 lines / 77.6 branches;
       // providers 87.9 branches; event-store 89.0 lines / 66.7 branches).

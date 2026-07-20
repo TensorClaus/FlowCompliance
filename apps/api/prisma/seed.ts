@@ -32,6 +32,10 @@ async function main() {
       id: THANDI_USER_ID,
       tenantId: ACME_TENANT_ID,
       email: 'thandi@acme.co.za',
+      name: 'Thandi Mokoena',
+      passwordHash: '',
+      name: 'Thandi Mokoena',
+      passwordHash: '',
       role: 'EE_MANAGER',
     },
   })

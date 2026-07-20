@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/no-process-exit */
-import './config.js' // fail-fast env validation — must be first
+import { config } from './config.js' // fail-fast env validation — must be first
 import { buildApp } from './app.js'
 
 const app = await buildApp()
@@ -18,7 +18,7 @@ process.on('SIGINT', () => {
 })
 
 try {
-  await app.listen({ port: 3001, host: '0.0.0.0' })
+  await app.listen({ port: config.PORT, host: '0.0.0.0' })
 } catch (error) {
   app.log.error(error)
   process.exit(1)
